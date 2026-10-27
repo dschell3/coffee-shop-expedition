@@ -43,6 +43,7 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     font-family: var(--font);
@@ -87,6 +88,8 @@
     padding: 6px 14px; min-height: 44px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
   }
   .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+  .steps { margin: 12px 0 0; }
+  .target.far { animation: none; opacity: .75; }
   .rules { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--block); font-size: 0.95rem; }
   .rules p { margin: 0; }
   .rules p + p { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
@@ -166,13 +169,16 @@
     <aside>
       <section class="card" aria-live="polite">
         <div id="turn"></div>
+        <div class="sizes steps" role="group" aria-label="How many blocks to move" id="steps" hidden>
+          <span>Blocks:</span>
+        </div>
         <div class="controls">
           <button class="btn move" id="btnN">↑ North</button>
           <button class="btn move" id="btnE">→ East</button>
           <button class="btn" id="btnUndo">Undo</button>
           <button class="btn" id="btnNew">New game</button>
         </div>
-        <p class="keys">Keyboard: ↑ North · → East · U undo · R restart</p>
+        <p class="keys" id="keys"></p>
       </section>
 
       <section class="card">
@@ -215,19 +221,32 @@
 (function () {
   const PCLASS = { 1: 'var(--p1)', 2: 'var(--p2)' };
   const SIZES = { '3x2': [3, 2], '3x3': [3, 3], '5x4': [5, 4] };
+  const DIRNAME = { N: 'North', E: 'East', S: 'South', W: 'West' };
   const MODES = {
     classic: {
       name: 'Classic',
       boards: ['3x2', '3x3', '5x4'],
-      rules: 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.'
+      rules: 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.',
+      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →.',
+      keys: '↑ North · → East · U undo · R restart'
+    },
+    long: {
+      name: 'Long moves',
+      boards: ['3x2', '3x3', '5x4'],
+      long: true,
+      rules: 'On your turn, move as many blocks as you like, but all North or all East. At least 1 block. Whoever reaches Starbucks wins.',
+      hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.',
+      keys: '↑ North · → East · 1–9 picks how many blocks · U undo · R restart'
     }
   };
+  const isLong = () => !!MODES[mode].long;
 
   let mode = 'classic';
   let sizeKey = '3x2';
   let n = 3, m = 2;
   let path = [{ x: 0, y: 0 }];
-  let moves = [];
+  let moves = [];      // each move is { d: 'N' | 'E', k: blocks }
+  let steps = 1;       // how many blocks the buttons and arrow keys move (long-move modes)
   // Scoreboard is kept for every mode and board size.
   const scores = {};
   Object.keys(MODES).forEach(mk => {
@@ -242,17 +261,32 @@
   const currentPlayer = () => playerForMove(moves.length);
   const winner = () => playerForMove(moves.length - 1);
 
-  function canMove(d) {
-    if (isOver()) return false;
-    const c = cur();
-    return d === 'E' ? c.x < n : c.y < m;
+  // Forward moves from corner (x, y) under the current mode. Each is { d, k, x, y }:
+  // direction, number of blocks, and the corner you land on.
+  function forwardMovesFrom(x, y) {
+    const out = [];
+    const maxE = isLong() ? n - x : Math.min(1, n - x);
+    const maxN = isLong() ? m - y : Math.min(1, m - y);
+    for (let k = 1; k <= maxE; k++) out.push({ d: 'E', k, x: x + k, y });
+    for (let k = 1; k <= maxN; k++) out.push({ d: 'N', k, x, y: y + k });
+    return out;
   }
 
-  function move(d) {
-    if (!canMove(d)) return;
+  function legalMoves() {
+    if (isOver()) return [];
     const c = cur();
-    path.push(d === 'E' ? { x: c.x + 1, y: c.y } : { x: c.x, y: c.y + 1 });
-    moves.push(d);
+    return forwardMovesFrom(c.x, c.y);
+  }
+
+  const findMove = (d, k) => legalMoves().find(mv => mv.d === d && mv.k === k);
+  const canMove = (d, k = 1) => !!findMove(d, k);
+
+  function move(d, k = 1) {
+    const mv = findMove(d, k);
+    if (!mv) return;
+    path.push({ x: mv.x, y: mv.y });
+    moves.push({ d: mv.d, k: mv.k });
+    steps = 1;
     if (isOver()) {
       const s = scores[mode][sizeKey];
       s.games++;
@@ -265,12 +299,19 @@
     if (!moves.length || isOver()) return;
     path.pop();
     moves.pop();
+    steps = 1;
     render();
   }
 
   function newGame() {
     path = [{ x: 0, y: 0 }];
     moves = [];
+    steps = 1;
+    render();
+  }
+
+  function setSteps(k) {
+    steps = k;
     render();
   }
 
@@ -332,9 +373,11 @@
 
     if (!isOver()) {
       const col = PCLASS[currentPlayer()];
-      [['E', c.x + 1, c.y], ['N', c.x, c.y + 1]].forEach(([d, tx, ty]) => {
-        if (!canMove(d)) return;
-        s += `<circle class="target" data-move="${d}" cx="${X(tx)}" cy="${Y(ty)}" r="13" style="fill:${col};stroke:${col}" fill-opacity=".18" stroke-width="2.5" stroke-dasharray="5 4"><title>Move ${d === 'E' ? 'East' : 'North'}</title></circle>`;
+      legalMoves().forEach(mv => {
+        const cls = mv.k > 1 ? 'target far' : 'target';
+        const r = mv.k > 1 ? 11 : 13;
+        const title = `Move ${DIRNAME[mv.d]}${mv.k > 1 ? ` ${mv.k} blocks` : ''}`;
+        s += `<circle class="${cls}" data-move="${mv.d}" data-k="${mv.k}" cx="${X(mv.x)}" cy="${Y(mv.y)}" r="${r}" style="fill:${col};stroke:${col}" fill-opacity=".18" stroke-width="2.5" stroke-dasharray="5 4"><title>${title}</title></circle>`;
       });
     }
 
@@ -344,8 +387,18 @@
     s += `</svg>`;
     $('board').innerHTML = s;
     $('board').querySelectorAll('.target').forEach(el => {
-      el.addEventListener('click', () => move(el.dataset.move));
+      el.addEventListener('click', () => move(el.dataset.move, Number(el.dataset.k)));
     });
+  }
+
+  // Block-count picker, only shown in long-move modes.
+  function renderSteps() {
+    const box = $('steps');
+    if (!isLong() || isOver()) { box.hidden = true; return; }
+    const counts = [...new Set(legalMoves().map(mv => mv.k))].sort((a, b) => a - b);
+    if (!counts.includes(steps)) steps = counts[0] || 1;
+    renderPills(box, counts.map(k => [k, String(k)]), steps, setSteps);
+    box.hidden = counts.length <= 1;
   }
 
   function renderTurn() {
@@ -364,26 +417,31 @@
         <div class="turn"><span class="chip" style="background:${PCLASS[p]}"></span>Player ${p}'s turn</div>
         <p class="togo">Blocks to go: ${togo}</p>`;
     }
-    $('btnN').disabled = !canMove('N');
-    $('btnE').disabled = !canMove('E');
+    const times = steps > 1 ? ` ×${steps}` : '';
+    $('btnN').textContent = `↑ North${times}`;
+    $('btnE').textContent = `→ East${times}`;
+    $('btnN').disabled = !canMove('N', steps);
+    $('btnE').disabled = !canMove('E', steps);
     $('btnUndo').disabled = !moves.length || isOver();
     $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
+    $('keys').textContent = `Keyboard: ${MODES[mode].keys}`;
   }
 
   function renderWord() {
     if (!moves.length) {
-      $('word').innerHTML = `<span class="empty">Each move adds a letter: N or E.</span>`;
+      $('word').innerHTML = `<span class="empty">Each block walked adds a letter: N or E.</span>`;
       return;
     }
-    $('word').innerHTML = moves.map((d, i) =>
-      `<span style="color:${PCLASS[playerForMove(i)]}" title="Move ${i + 1}, Player ${playerForMove(i)}">${d}</span>`
+    $('word').innerHTML = moves.map((mv, i) =>
+      `<span style="color:${PCLASS[playerForMove(i)]}" title="Move ${i + 1}, Player ${playerForMove(i)}">${mv.d.repeat(mv.k)}</span>`
     ).join('');
   }
 
   function renderLog() {
-    $('log').innerHTML = moves.map((d, i) => {
+    $('log').innerHTML = moves.map((mv, i) => {
       const p = path[i + 1];
-      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${d === 'E' ? 'East' : 'North'} → (${p.x}, ${p.y})</li>`;
+      const times = mv.k > 1 ? ` ×${mv.k}` : '';
+      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${DIRNAME[mv.d]}${times} → (${p.x}, ${p.y})</li>`;
     }).join('');
     $('logEmpty').hidden = moves.length > 0;
     const log = $('log');
@@ -422,6 +480,7 @@
 
   function renderRules() {
     $('rules').innerHTML = `<p>${MODES[mode].rules}</p>`;
+    $('boardHint').textContent = MODES[mode].hint;
   }
 
   function render() {
@@ -429,23 +488,25 @@
     renderSizes();
     renderRules();
     renderBoard();
+    renderSteps();
     renderTurn();
     renderWord();
     renderLog();
     renderScores();
   }
 
-  $('btnN').addEventListener('click', () => move('N'));
-  $('btnE').addEventListener('click', () => move('E'));
+  $('btnN').addEventListener('click', () => move('N', steps));
+  $('btnE').addEventListener('click', () => move('E', steps));
   $('btnUndo').addEventListener('click', undo);
   $('btnNew').addEventListener('click', newGame);
   document.addEventListener('keydown', e => {
-    if (e.target.closest && e.target.closest('input, textarea')) return;
+    if (e.target.closest && e.target.closest('input, textarea, select')) return;
     const k = e.key;
-    if (k === 'ArrowUp') { e.preventDefault(); move('N'); }
-    else if (k === 'ArrowRight') { e.preventDefault(); move('E'); }
+    if (k === 'ArrowUp') { e.preventDefault(); move('N', steps); }
+    else if (k === 'ArrowRight') { e.preventDefault(); move('E', steps); }
     else if (k === 'u' || k === 'U') undo();
     else if (k === 'r' || k === 'R') newGame();
+    else if (isLong() && /^[1-9]$/.test(k)) setSteps(Number(k));
   });
 
   render();
