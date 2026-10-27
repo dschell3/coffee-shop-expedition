@@ -89,6 +89,12 @@
   }
   .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
   .steps { margin: 12px 0 0; }
+  .opt { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 0.9rem; }
+  select {
+    font: inherit; font-weight: 600; color: var(--ink); background: var(--btn-bg);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; min-height: 44px; max-width: 100%;
+  }
+  select:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
   .target.far { animation: none; opacity: .75; }
   .target.back { animation: none; }
   .chaos {
@@ -218,7 +224,7 @@
       <section class="card">
         <h2 id="scoreTitle">Scoreboard</h2>
         <table>
-          <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th></tr></thead>
+          <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th><th id="drawHead" hidden>Nobody</th></tr></thead>
           <tbody id="scores"></tbody>
         </table>
       </section>
@@ -275,9 +281,28 @@
       chaos: true,
       rules: 'Move 1 block North or East. But on every 3rd turn of the game (turns 3, 6, 9, and so on), you may step 1 block South or West instead. You can never step back onto Start.',
       hint: 'Tap a glowing corner, use the buttons, or press the arrow keys. On a chaos turn, the dotted corners step back.'
+    },
+    chaosLong: {
+      name: 'Chaos + long',
+      boards: ['3x2', '3x3', '5x4'],
+      chaos: true,
+      long: true,
+      rules: 'Long moves: go as far as you like, all North or all East. On every 3rd turn (3, 6, 9, and so on), you may step back South or West instead. Never back onto Start.',
+      hint: 'Tap any glowing corner. Dotted corners step back on a chaos turn. This mode is an experiment, so try each setting.'
     }
   };
   const isChaosMode = () => !!MODES[mode].chaos;
+
+  // Chaos + long moves could loop forever. These settings stop that. Try each one.
+  const CHAOS_RULES = {
+    cap: { label: 'Back moves are 1 block', text: 'Back moves are only 1 block. Forward moves can still be long.' },
+    tokens: { label: '2 chaos moves each', text: 'Each player gets only 2 chaos moves per game, shown as cups. Back moves can be long.' },
+    limit: { label: '30-turn limit', text: 'Back moves can be long. If the game reaches 30 turns with no winner, nobody wins.' }
+  };
+  const CHAOS_TOKENS = 2;
+  const TURN_LIMIT = 30;
+  let chaosRule = 'cap';
+  const chaosRuleNow = () => (mode === 'chaosLong' ? chaosRule : 'cap');
   let railLong = false;  // Railroad mode with long moves turned on
   const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
   const isRail = () => !!MODES[mode].rail;
@@ -301,13 +326,16 @@
   function scoreFor(key) {
     const mk = scoreMode();
     scores[mk] = scores[mk] || {};
-    scores[mk][key] = scores[mk][key] || { games: 0, p1: 0, p2: 0 };
+    scores[mk][key] = scores[mk][key] || { games: 0, p1: 0, p2: 0, draws: 0 };
     return scores[mk][key];
   }
 
   const $ = id => document.getElementById(id);
   const cur = () => path[path.length - 1];
-  const isOver = () => cur().x === n && cur().y === m;
+  const atGoal = () => cur().x === n && cur().y === m;
+  // With the turn limit setting, the game can also end with nobody winning.
+  const isDraw = () => !atGoal() && chaosRuleNow() === 'limit' && moves.length >= TURN_LIMIT;
+  const isOver = () => atGoal() || isDraw();
   const playerForMove = i => (i % 2 === 0 ? 1 : 2);
   const currentPlayer = () => playerForMove(moves.length);
   const winner = () => playerForMove(moves.length - 1);
@@ -315,12 +343,22 @@
   // Chaos turns are every 3rd turn of the game: 3, 6, 9, ...
   const isChaosTurn = () => isChaosMode() && !isOver() && turnNumber() % 3 === 0;
 
-  // Backward moves allowed on a chaos turn: 1 block South or West. Never off the
-  // board, and never back onto Start.
+  // How many chaos (backward) moves a player has made this game.
+  const chaosUsed = p => moves.filter((mv, i) => playerForMove(i) === p && (mv.d === 'S' || mv.d === 'W')).length;
+  const chaosLeft = p => CHAOS_TOKENS - chaosUsed(p);
+
+  // Backward moves allowed on a chaos turn: South or West. Never off the board,
+  // and never back onto Start. Back moves are 1 block unless a Chaos + long
+  // setting says they can be long.
   function backMovesFrom(x, y) {
+    const rule = chaosRuleNow();
+    if (rule === 'tokens' && chaosLeft(currentPlayer()) <= 0) return [];
+    const long = rule !== 'cap';
+    const maxW = long ? x : Math.min(1, x);
+    const maxS = long ? y : Math.min(1, y);
     const out = [];
-    if (x >= 1) out.push({ d: 'W', k: 1, x: x - 1, y, back: true });
-    if (y >= 1) out.push({ d: 'S', k: 1, x, y: y - 1, back: true });
+    for (let k = 1; k <= maxW; k++) out.push({ d: 'W', k, x: x - k, y, back: true });
+    for (let k = 1; k <= maxS; k++) out.push({ d: 'S', k, x, y: y - k, back: true });
     return out.filter(mv => !(mv.x === 0 && mv.y === 0));
   }
 
@@ -408,7 +446,9 @@
     if (isOver()) {
       const s = scoreFor(sizeKey);
       s.games++;
-      if (winner() === 1) s.p1++; else s.p2++;
+      if (isDraw()) s.draws++;
+      else if (winner() === 1) s.p1++;
+      else s.p2++;
     }
     render();
   }
@@ -443,6 +483,11 @@
 
   function setRailLong(on) {
     railLong = on;
+    newGame();
+  }
+
+  function setChaosRule(key) {
+    chaosRule = key;
     newGame();
   }
 
@@ -555,7 +600,14 @@
 
   function renderTurn() {
     const togo = (n - cur().x) + (m - cur().y);
-    if (isOver()) {
+    if (isDraw()) {
+      $('turn').innerHTML = `
+        <div class="turn"><span class="chip" style="background:var(--muted)"></span>Nobody wins</div>
+        <div class="win" style="color:var(--muted)">
+          ${TURN_LIMIT} turns went by and nobody reached the coffee.
+          <p>Try again, or pick a different setting for this mode.</p>
+        </div>`;
+    } else if (isOver()) {
       const w = winner();
       $('turn').innerHTML = `
         <div class="turn"><span class="chip" style="background:${PCLASS[w]}"></span>Player ${w} wins!</div>
@@ -570,9 +622,21 @@
       if (isChaosMode()) {
         const t = turnNumber();
         const until = 3 - (t % 3);
-        extra = isChaosTurn()
-          ? `<div class="chaos">Chaos turn! You may step back 1 block South or West.<small>Or move forward as usual.</small></div>`
-          : `<p class="togo">Turn ${t}. Next chaos turn in ${until} turn${until > 1 ? 's' : ''}.</p>`;
+        const rule = chaosRuleNow();
+        const howFar = rule === 'cap' ? '1 block' : 'any number of blocks';
+        const turnLabel = rule === 'limit' ? `Turn ${t} of ${TURN_LIMIT}.` : `Turn ${t}.`;
+        if (isChaosTurn()) {
+          const none = rule === 'tokens' && chaosLeft(p) <= 0;
+          extra = none
+            ? `<div class="chaos">Chaos turn, but you are out of chaos moves.<small>Move forward as usual.</small></div>`
+            : `<div class="chaos">Chaos turn! You may step back ${howFar} South or West.<small>Or move forward as usual.</small></div>`;
+        } else {
+          extra = `<p class="togo">${turnLabel} Next chaos turn in ${until} turn${until > 1 ? 's' : ''}.</p>`;
+        }
+        if (rule === 'tokens') {
+          const cups = q => (q > 0 ? '☕'.repeat(q) : 'none');
+          extra += `<p class="togo">Chaos moves left · Player 1: ${cups(chaosLeft(1))} · Player 2: ${cups(chaosLeft(2))}</p>`;
+        }
       }
       $('turn').innerHTML = `
         <div class="turn"><span class="chip" style="background:${PCLASS[p]}"></span>Player ${p}'s turn</div>
@@ -584,8 +648,12 @@
     $('btnN').disabled = !canMove('N', steps);
     $('btnE').disabled = !canMove('E', steps);
     $('btnS').hidden = $('btnW').hidden = !isChaosMode();
-    $('btnS').disabled = !canMove('S', 1);
-    $('btnW').disabled = !canMove('W', 1);
+    const backSteps = chaosRuleNow() === 'cap' ? 1 : steps;
+    const backTimes = backSteps > 1 ? ` ×${backSteps}` : '';
+    $('btnS').textContent = `↓ South${backTimes}`;
+    $('btnW').textContent = `← West${backTimes}`;
+    $('btnS').disabled = !canMove('S', backSteps);
+    $('btnW').disabled = !canMove('W', backSteps);
     $('btnUndo').disabled = !moves.length || isOver();
     $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
     $('keys').textContent = `Keyboard: ${keysText()}`;
@@ -617,10 +685,13 @@
 
   function renderScores() {
     $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
+    const showDraws = mode === 'chaosLong';
+    $('drawHead').hidden = !showDraws;
     $('scores').innerHTML = MODES[mode].boards.map(k => {
       const s = scoreFor(k);
       const [a, b] = SIZES[k];
-      return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td></tr>`;
+      const draws = showDraws ? `<td>${s.draws}</td>` : '';
+      return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td>${draws}</tr>`;
     }).join('');
   }
 
@@ -652,7 +723,8 @@
       const ok = countPaths(n, m, cornerOk);
       count = `This board has ${all} routes in all. Only ${ok} of them stay on or above the track.`;
     }
-    const rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
+    let rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
+    if (mode === 'chaosLong') rules += ' ' + CHAOS_RULES[chaosRule].text;
     $('rules').innerHTML = `<p>${rules}</p><p>${count}</p>`;
     $('boardHint').textContent = MODES[mode].hint;
   }
@@ -669,6 +741,23 @@
       b.textContent = `Long moves: ${railLong ? 'on' : 'off'}`;
       b.addEventListener('click', () => setRailLong(!railLong));
       box.appendChild(b);
+    }
+    if (mode === 'chaosLong') {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      label.textContent = 'To stop endless games: ';
+      const sel = document.createElement('select');
+      sel.id = 'chaosRule';
+      Object.keys(CHAOS_RULES).forEach(k => {
+        const o = document.createElement('option');
+        o.value = k;
+        o.textContent = CHAOS_RULES[k].label;
+        o.selected = k === chaosRule;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => setChaosRule(sel.value));
+      label.appendChild(sel);
+      box.appendChild(label);
     }
     box.hidden = !box.children.length;
   }
@@ -688,8 +777,9 @@
 
   $('btnN').addEventListener('click', () => move('N', steps));
   $('btnE').addEventListener('click', () => move('E', steps));
-  $('btnS').addEventListener('click', () => move('S', 1));
-  $('btnW').addEventListener('click', () => move('W', 1));
+  const backSteps = () => (chaosRuleNow() === 'cap' ? 1 : steps);
+  $('btnS').addEventListener('click', () => move('S', backSteps()));
+  $('btnW').addEventListener('click', () => move('W', backSteps()));
   $('btnUndo').addEventListener('click', undo);
   $('btnNew').addEventListener('click', newGame);
   $('btnHint').addEventListener('click', showHint);
@@ -698,8 +788,8 @@
     const k = e.key;
     if (k === 'ArrowUp') { e.preventDefault(); move('N', steps); }
     else if (k === 'ArrowRight') { e.preventDefault(); move('E', steps); }
-    else if (k === 'ArrowDown') { e.preventDefault(); move('S', 1); }
-    else if (k === 'ArrowLeft') { e.preventDefault(); move('W', 1); }
+    else if (k === 'ArrowDown') { e.preventDefault(); move('S', backSteps()); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); move('W', backSteps()); }
     else if (k === 'u' || k === 'U') undo();
     else if (k === 'r' || k === 'R') newGame();
     else if ((k === 'h' || k === 'H') && hasSolver() && !isOver()) showHint();
