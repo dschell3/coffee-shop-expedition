@@ -168,6 +168,7 @@
       <div class="sizes" role="group" aria-label="Board size" id="sizes">
         <span>Board:</span>
       </div>
+      <div class="sizes" role="group" aria-label="Mode settings" id="options" hidden></div>
       <div id="board"></div>
       <div class="rules" id="rules"></div>
       <p class="hint" id="boardHint">Tap a glowing corner, use the buttons, or press ↑ / →.</p>
@@ -238,8 +239,7 @@
       name: 'Classic',
       boards: ['3x2', '3x3', '5x4'],
       rules: 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.',
-      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →.',
-      keys: '↑ North · → East · U undo · R restart'
+      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →.'
     },
     long: {
       name: 'Long moves',
@@ -247,8 +247,7 @@
       long: true,
       solver: true,
       rules: 'On your turn, move as many blocks as you like, but all North or all East. At least 1 block. Whoever reaches Starbucks wins.',
-      hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.',
-      keys: '↑ North · → East · 1–9 picks how many blocks · H hint · U undo · R restart'
+      hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.'
     },
     rail: {
       name: 'Railroad',
@@ -256,12 +255,16 @@
       rail: true,
       solver: true,
       rules: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move 1 block North or East.',
-      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →. Corners below the track are off limits.',
-      keys: '↑ North · → East · H hint · U undo · R restart'
+      rulesLong: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move as many blocks as you like, but all North or all East.',
+      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →. Corners below the track are off limits.'
     }
   };
-  const isLong = () => !!MODES[mode].long;
+  let railLong = false;  // Railroad mode with long moves turned on
+  const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
   const isRail = () => !!MODES[mode].rail;
+  const hasSolver = () => !!MODES[mode].solver;
+  const keysText = () => '↑ North · → East' + (isLong() ? ' · 1–9 picks how many blocks' : '') +
+    (hasSolver() ? ' · H hint' : '') + ' · U undo · R restart';
   // Can the token stand on corner (x, y) in this mode?
   const cornerOk = (x, y) => !isRail() || y >= x;
 
@@ -272,12 +275,16 @@
   let moves = [];      // each move is { d: 'N' | 'E', k: blocks }
   let steps = 1;       // how many blocks the buttons and arrow keys move (long-move modes)
   let hintText = '';   // last hint shown; cleared whenever the position changes
-  // Scoreboard is kept for every mode and board size.
+  // Scoreboard is kept for every mode (and mode option) and board size.
   const scores = {};
-  Object.keys(MODES).forEach(mk => {
-    scores[mk] = {};
-    MODES[mk].boards.forEach(k => { scores[mk][k] = { games: 0, p1: 0, p2: 0 }; });
-  });
+  const scoreMode = () => mode + (isRail() && railLong ? '+long' : '');
+  const scoreName = () => MODES[mode].name + (isRail() && railLong ? ' + long moves' : '');
+  function scoreFor(key) {
+    const mk = scoreMode();
+    scores[mk] = scores[mk] || {};
+    scores[mk][key] = scores[mk][key] || { games: 0, p1: 0, p2: 0 };
+    return scores[mk][key];
+  }
 
   const $ = id => document.getElementById(id);
   const cur = () => path[path.length - 1];
@@ -367,7 +374,7 @@
     steps = 1;
     hintText = '';
     if (isOver()) {
-      const s = scores[mode][sizeKey];
+      const s = scoreFor(sizeKey);
       s.games++;
       if (winner() === 1) s.p1++; else s.p2++;
     }
@@ -399,6 +406,11 @@
   function setSize(key) {
     sizeKey = key;
     [n, m] = SIZES[key];
+    newGame();
+  }
+
+  function setRailLong(on) {
+    railLong = on;
     newGame();
   }
 
@@ -512,8 +524,8 @@
     $('btnE').disabled = !canMove('E', steps);
     $('btnUndo').disabled = !moves.length || isOver();
     $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
-    $('keys').textContent = `Keyboard: ${MODES[mode].keys}`;
-    $('hintBox').hidden = !MODES[mode].solver || isOver();
+    $('keys').textContent = `Keyboard: ${keysText()}`;
+    $('hintBox').hidden = !hasSolver() || isOver();
     $('hintOut').textContent = hintText;
   }
 
@@ -539,9 +551,9 @@
   }
 
   function renderScores() {
-    $('scoreTitle').textContent = `Scoreboard · ${MODES[mode].name}`;
+    $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
     $('scores').innerHTML = MODES[mode].boards.map(k => {
-      const s = scores[mode][k];
+      const s = scoreFor(k);
       const [a, b] = SIZES[k];
       return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td></tr>`;
     }).join('');
@@ -575,13 +587,31 @@
       const ok = countPaths(n, m, cornerOk);
       count = `This board has ${all} routes in all. Only ${ok} of them stay on or above the track.`;
     }
-    $('rules').innerHTML = `<p>${MODES[mode].rules}</p><p>${count}</p>`;
+    const rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
+    $('rules').innerHTML = `<p>${rules}</p><p>${count}</p>`;
     $('boardHint').textContent = MODES[mode].hint;
+  }
+
+  // Extra settings some modes have. They live in a row under the board sizes.
+  function renderOptions() {
+    const box = $('options');
+    box.innerHTML = '';
+    if (isRail()) {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.id = 'railLong';
+      b.setAttribute('aria-pressed', railLong ? 'true' : 'false');
+      b.textContent = `Long moves: ${railLong ? 'on' : 'off'}`;
+      b.addEventListener('click', () => setRailLong(!railLong));
+      box.appendChild(b);
+    }
+    box.hidden = !box.children.length;
   }
 
   function render() {
     renderModes();
     renderSizes();
+    renderOptions();
     renderRules();
     renderBoard();
     renderSteps();
@@ -603,7 +633,7 @@
     else if (k === 'ArrowRight') { e.preventDefault(); move('E', steps); }
     else if (k === 'u' || k === 'U') undo();
     else if (k === 'r' || k === 'R') newGame();
-    else if ((k === 'h' || k === 'H') && MODES[mode].solver && !isOver()) showHint();
+    else if ((k === 'h' || k === 'H') && hasSolver() && !isOver()) showHint();
     else if (isLong() && /^[1-9]$/.test(k)) setSteps(Number(k));
   });
 
