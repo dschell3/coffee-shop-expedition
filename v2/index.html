@@ -96,8 +96,11 @@
 
   #board svg { width: 100%; height: auto; display: block; max-height: 70vh; }
   .blk { fill: var(--block); }
+  .blk.off { fill: var(--line); opacity: .45; }
   .street { stroke: var(--street); }
   .dot { fill: var(--dot); }
+  .dot.off { fill: var(--card); stroke: var(--dot); stroke-width: 2; }
+  .track { stroke: var(--cup); opacity: .8; }
   .axis { fill: var(--axis); }
   .lbl { fill: var(--ink); }
   .cup-fill { fill: var(--cup); }
@@ -228,7 +231,7 @@
 <script>
 (function () {
   const PCLASS = { 1: 'var(--p1)', 2: 'var(--p2)' };
-  const SIZES = { '3x2': [3, 2], '3x3': [3, 3], '5x4': [5, 4] };
+  const SIZES = { '3x2': [3, 2], '3x3': [3, 3], '5x4': [5, 4], '4x4': [4, 4], '5x5': [5, 5] };
   const DIRNAME = { N: 'North', E: 'East', S: 'South', W: 'West' };
   const MODES = {
     classic: {
@@ -246,9 +249,21 @@
       rules: 'On your turn, move as many blocks as you like, but all North or all East. At least 1 block. Whoever reaches Starbucks wins.',
       hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.',
       keys: '↑ North · → East · 1–9 picks how many blocks · H hint · U undo · R restart'
+    },
+    rail: {
+      name: 'Railroad',
+      boards: ['3x3', '4x4', '5x5'],
+      rail: true,
+      solver: true,
+      rules: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move 1 block North or East.',
+      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →. Corners below the track are off limits.',
+      keys: '↑ North · → East · H hint · U undo · R restart'
     }
   };
   const isLong = () => !!MODES[mode].long;
+  const isRail = () => !!MODES[mode].rail;
+  // Can the token stand on corner (x, y) in this mode?
+  const cornerOk = (x, y) => !isRail() || y >= x;
 
   let mode = 'classic';
   let sizeKey = '3x2';
@@ -279,7 +294,24 @@
     const maxN = isLong() ? m - y : Math.min(1, m - y);
     for (let k = 1; k <= maxE; k++) out.push({ d: 'E', k, x: x + k, y });
     for (let k = 1; k <= maxN; k++) out.push({ d: 'N', k, x, y: y + k });
-    return out;
+    // A straight move only crosses corners between start and finish, so checking
+    // the finish corner is enough.
+    return out.filter(mv => cornerOk(mv.x, mv.y));
+  }
+
+  // Count routes from Start to (w, h) with the corner rule:
+  // paths(x, y) = paths(x - 1, y) + paths(x, y - 1). `ok(x, y)` says if a corner may be used.
+  function countPaths(w, h, ok) {
+    const p = [];
+    for (let x = 0; x <= w; x++) {
+      p[x] = [];
+      for (let y = 0; y <= h; y++) {
+        if (!ok(x, y)) { p[x][y] = 0; continue; }
+        if (x === 0 && y === 0) { p[x][y] = 1; continue; }
+        p[x][y] = (x > 0 ? p[x - 1][y] : 0) + (y > 0 ? p[x][y - 1] : 0);
+      }
+    }
+    return p[w][h];
   }
 
   function legalMoves() {
@@ -394,10 +426,13 @@
     const X = x => padL + x * cell;
     const Y = y => padT + (m - y) * cell;
     const c = cur();
-    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).">`;
+    const railNote = isRail() ? ' A train track runs along the diagonal; corners below it are off limits.' : '';
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${MODES[mode].name} mode, ${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).${railNote}">`;
 
     for (let x = 0; x < n; x++) for (let y = 0; y < m; y++) {
-      s += `<rect class="blk" x="${X(x) + 9}" y="${Y(y + 1) + 9}" width="${cell - 18}" height="${cell - 18}" rx="9"/>`;
+      // In railroad mode, blocks fully below the track are dimmed.
+      const off = isRail() && y < x ? ' off' : '';
+      s += `<rect class="blk${off}" x="${X(x) + 9}" y="${Y(y + 1) + 9}" width="${cell - 18}" height="${cell - 18}" rx="9"/>`;
     }
     for (let x = 0; x <= n; x++) s += `<line class="street" x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(m)}" stroke-width="3" stroke-linecap="round"/>`;
     for (let y = 0; y <= m; y++) s += `<line class="street" x1="${X(0)}" y1="${Y(y)}" x2="${X(n)}" y2="${Y(y)}" stroke-width="3" stroke-linecap="round"/>`;
@@ -413,7 +448,11 @@
     }
 
     for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) {
-      s += `<circle class="dot" cx="${X(x)}" cy="${Y(y)}" r="3.5"/>`;
+      const off = cornerOk(x, y) ? '' : ' off';
+      s += `<circle class="dot${off}" cx="${X(x)}" cy="${Y(y)}" r="${off ? 5 : 3.5}"/>`;
+    }
+    if (isRail()) {
+      s += `<line class="track" x1="${X(0)}" y1="${Y(0)}" x2="${X(n)}" y2="${Y(m)}" stroke-width="5" stroke-dasharray="10 8" stroke-linecap="round"><title>Train track</title></line>`;
     }
 
     s += cupIcon(X(n), Y(m));
@@ -530,7 +569,13 @@
   }
 
   function renderRules() {
-    $('rules').innerHTML = `<p>${MODES[mode].rules}</p>`;
+    const all = countPaths(n, m, () => true);
+    let count = `There are ${all} different routes from Start to Starbucks on this board.`;
+    if (isRail()) {
+      const ok = countPaths(n, m, cornerOk);
+      count = `This board has ${all} routes in all. Only ${ok} of them stay on or above the track.`;
+    }
+    $('rules').innerHTML = `<p>${MODES[mode].rules}</p><p>${count}</p>`;
     $('boardHint').textContent = MODES[mode].hint;
   }
 
