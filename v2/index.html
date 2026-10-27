@@ -127,6 +127,10 @@
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn:focus-visible, .size-btn:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
   .keys { color: var(--muted); font-size: 0.82rem; margin: 8px 0 0; }
+  .hintbox { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; margin-top: 12px; }
+  .hintbox .btn { padding-inline: 16px; }
+  .hintout { margin: 0; font-size: 0.93rem; min-height: 1.3em; }
+  .hintout:empty::before { content: 'Stuck? Ask for a hint.'; color: var(--muted); }
 
   .word { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; letter-spacing: 0.12em; min-height: 1.8rem; word-break: break-all; }
   .word .empty { color: var(--muted); font-weight: 400; font-size: 0.95rem; letter-spacing: 0; font-family: var(--font); }
@@ -179,6 +183,10 @@
           <button class="btn" id="btnNew">New game</button>
         </div>
         <p class="keys" id="keys"></p>
+        <div class="hintbox" id="hintBox" hidden>
+          <button class="btn" id="btnHint">Hint</button>
+          <p class="hintout" id="hintOut"></p>
+        </div>
       </section>
 
       <section class="card">
@@ -234,9 +242,10 @@
       name: 'Long moves',
       boards: ['3x2', '3x3', '5x4'],
       long: true,
+      solver: true,
       rules: 'On your turn, move as many blocks as you like, but all North or all East. At least 1 block. Whoever reaches Starbucks wins.',
       hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.',
-      keys: '↑ North · → East · 1–9 picks how many blocks · U undo · R restart'
+      keys: '↑ North · → East · 1–9 picks how many blocks · H hint · U undo · R restart'
     }
   };
   const isLong = () => !!MODES[mode].long;
@@ -247,6 +256,7 @@
   let path = [{ x: 0, y: 0 }];
   let moves = [];      // each move is { d: 'N' | 'E', k: blocks }
   let steps = 1;       // how many blocks the buttons and arrow keys move (long-move modes)
+  let hintText = '';   // last hint shown; cleared whenever the position changes
   // Scoreboard is kept for every mode and board size.
   const scores = {};
   Object.keys(MODES).forEach(mk => {
@@ -278,6 +288,42 @@
     return forwardMovesFrom(c.x, c.y);
   }
 
+  // Solver for modes where the token only moves forward (no loops possible).
+  // A corner is "losing" if the player who must move from it loses when both sides play well.
+  // Starbucks itself is losing for the player to move: the other player just took the coffee.
+  function makeSolver() {
+    const memo = new Map();
+    const losing = (x, y) => {
+      if (x === n && y === m) return true;
+      const key = x + ',' + y;
+      if (memo.has(key)) return memo.get(key);
+      const r = forwardMovesFrom(x, y).every(mv => !losing(mv.x, mv.y));
+      memo.set(key, r);
+      return r;
+    };
+    return losing;
+  }
+
+  function winningMoves() {
+    const losing = makeSolver();
+    return legalMoves().filter(mv => losing(mv.x, mv.y));
+  }
+
+  function showHint() {
+    const wins = winningMoves();
+    if (!wins.length) {
+      hintText = 'No winning move. Try to make them slip up.';
+    } else {
+      const mv = wins[0];
+      hintText = `Move ${DIRNAME[mv.d]} ${mv.k} block${mv.k > 1 ? 's' : ''}.`;
+      if (mode === 'long') {
+        const a = n - mv.x, b = m - mv.y;
+        hintText += ` That leaves ${a} blocks East and ${b} blocks North, the same both ways. Then copy whatever they do.`;
+      }
+    }
+    render();
+  }
+
   const findMove = (d, k) => legalMoves().find(mv => mv.d === d && mv.k === k);
   const canMove = (d, k = 1) => !!findMove(d, k);
 
@@ -287,6 +333,7 @@
     path.push({ x: mv.x, y: mv.y });
     moves.push({ d: mv.d, k: mv.k });
     steps = 1;
+    hintText = '';
     if (isOver()) {
       const s = scores[mode][sizeKey];
       s.games++;
@@ -300,6 +347,7 @@
     path.pop();
     moves.pop();
     steps = 1;
+    hintText = '';
     render();
   }
 
@@ -307,6 +355,7 @@
     path = [{ x: 0, y: 0 }];
     moves = [];
     steps = 1;
+    hintText = '';
     render();
   }
 
@@ -425,6 +474,8 @@
     $('btnUndo').disabled = !moves.length || isOver();
     $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
     $('keys').textContent = `Keyboard: ${MODES[mode].keys}`;
+    $('hintBox').hidden = !MODES[mode].solver || isOver();
+    $('hintOut').textContent = hintText;
   }
 
   function renderWord() {
@@ -499,6 +550,7 @@
   $('btnE').addEventListener('click', () => move('E', steps));
   $('btnUndo').addEventListener('click', undo);
   $('btnNew').addEventListener('click', newGame);
+  $('btnHint').addEventListener('click', showHint);
   document.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input, textarea, select')) return;
     const k = e.key;
@@ -506,6 +558,7 @@
     else if (k === 'ArrowRight') { e.preventDefault(); move('E', steps); }
     else if (k === 'u' || k === 'U') undo();
     else if (k === 'r' || k === 'R') newGame();
+    else if ((k === 'h' || k === 'H') && MODES[mode].solver && !isOver()) showHint();
     else if (isLong() && /^[1-9]$/.test(k)) setSteps(Number(k));
   });
 
