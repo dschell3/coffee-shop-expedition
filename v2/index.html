@@ -84,9 +84,12 @@
   .sizes span { color: var(--muted); font-size: 0.9rem; margin-right: 4px; }
   .size-btn {
     border: 1px solid var(--line); background: var(--btn-bg); color: var(--ink);
-    padding: 6px 14px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
+    padding: 6px 14px; min-height: 44px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
   }
   .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+  .rules { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--block); font-size: 0.95rem; }
+  .rules p { margin: 0; }
+  .rules p + p { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
 
   #board svg { width: 100%; height: auto; display: block; max-height: 70vh; }
   .blk { fill: var(--block); }
@@ -144,19 +147,20 @@
 <div class="wrap">
   <header>
     <h1>The Coffee Shop Expedition</h1>
-    <p class="sub">Take turns walking one block North or East. Whoever steps into the coffee shop wins.</p>
+    <p class="sub">A two-player walk across the city grid. Pick a mode, then race to the coffee shop.</p>
   </header>
 
   <main>
     <section class="card" aria-label="Game board">
-      <div class="sizes" role="group" aria-label="Board size">
+      <div class="sizes" role="group" aria-label="Game mode" id="modes">
+        <span>Mode:</span>
+      </div>
+      <div class="sizes" role="group" aria-label="Board size" id="sizes">
         <span>Board:</span>
-        <button class="size-btn" id="size-3x2" data-size="3x2">3 × 2</button>
-        <button class="size-btn" id="size-3x3" data-size="3x3">3 × 3</button>
-        <button class="size-btn" id="size-5x4" data-size="5x4">5 × 4</button>
       </div>
       <div id="board"></div>
-      <p class="hint">Tap a glowing corner, use the buttons, or press ↑ / →.</p>
+      <div class="rules" id="rules"></div>
+      <p class="hint" id="boardHint">Tap a glowing corner, use the buttons, or press ↑ / →.</p>
     </section>
 
     <aside>
@@ -183,7 +187,7 @@
       </section>
 
       <section class="card">
-        <h2>Scoreboard</h2>
+        <h2 id="scoreTitle">Scoreboard</h2>
         <table>
           <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th></tr></thead>
           <tbody id="scores"></tbody>
@@ -211,13 +215,25 @@
 (function () {
   const PCLASS = { 1: 'var(--p1)', 2: 'var(--p2)' };
   const SIZES = { '3x2': [3, 2], '3x3': [3, 3], '5x4': [5, 4] };
+  const MODES = {
+    classic: {
+      name: 'Classic',
+      boards: ['3x2', '3x3', '5x4'],
+      rules: 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.'
+    }
+  };
 
+  let mode = 'classic';
   let sizeKey = '3x2';
   let n = 3, m = 2;
   let path = [{ x: 0, y: 0 }];
   let moves = [];
+  // Scoreboard is kept for every mode and board size.
   const scores = {};
-  Object.keys(SIZES).forEach(k => { scores[k] = { games: 0, p1: 0, p2: 0 }; });
+  Object.keys(MODES).forEach(mk => {
+    scores[mk] = {};
+    MODES[mk].boards.forEach(k => { scores[mk][k] = { games: 0, p1: 0, p2: 0 }; });
+  });
 
   const $ = id => document.getElementById(id);
   const cur = () => path[path.length - 1];
@@ -238,7 +254,7 @@
     path.push(d === 'E' ? { x: c.x + 1, y: c.y } : { x: c.x, y: c.y + 1 });
     moves.push(d);
     if (isOver()) {
-      const s = scores[sizeKey];
+      const s = scores[mode][sizeKey];
       s.games++;
       if (winner() === 1) s.p1++; else s.p2++;
     }
@@ -262,6 +278,13 @@
     sizeKey = key;
     [n, m] = SIZES[key];
     newGame();
+  }
+
+  function setMode(key) {
+    mode = key;
+    // If this mode doesn't offer the current board, fall back to its first one.
+    const boards = MODES[mode].boards;
+    setSize(boards.includes(sizeKey) ? sizeKey : boards[0]);
   }
 
   function cupIcon(cx, cy) {
@@ -368,21 +391,43 @@
   }
 
   function renderScores() {
-    $('scores').innerHTML = Object.keys(SIZES).map(k => {
-      const s = scores[k];
+    $('scoreTitle').textContent = `Scoreboard · ${MODES[mode].name}`;
+    $('scores').innerHTML = MODES[mode].boards.map(k => {
+      const s = scores[mode][k];
       const [a, b] = SIZES[k];
       return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td></tr>`;
     }).join('');
   }
 
-  function renderSizes() {
-    document.querySelectorAll('.size-btn').forEach(b => {
-      b.setAttribute('aria-pressed', b.dataset.size === sizeKey ? 'true' : 'false');
+  // Pill buttons for a picker row. `items` is [[key, label], ...].
+  function renderPills(container, items, selected, onPick) {
+    container.querySelectorAll('button').forEach(b => b.remove());
+    items.forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.textContent = label;
+      b.setAttribute('aria-pressed', key === selected ? 'true' : 'false');
+      b.addEventListener('click', () => onPick(key));
+      container.appendChild(b);
     });
   }
 
+  function renderModes() {
+    renderPills($('modes'), Object.keys(MODES).map(k => [k, MODES[k].name]), mode, setMode);
+  }
+
+  function renderSizes() {
+    renderPills($('sizes'), MODES[mode].boards.map(k => [k, `${SIZES[k][0]} × ${SIZES[k][1]}`]), sizeKey, setSize);
+  }
+
+  function renderRules() {
+    $('rules').innerHTML = `<p>${MODES[mode].rules}</p>`;
+  }
+
   function render() {
+    renderModes();
     renderSizes();
+    renderRules();
     renderBoard();
     renderTurn();
     renderWord();
@@ -390,7 +435,6 @@
     renderScores();
   }
 
-  document.querySelectorAll('.size-btn').forEach(b => b.addEventListener('click', () => setSize(b.dataset.size)));
   $('btnN').addEventListener('click', () => move('N'));
   $('btnE').addEventListener('click', () => move('E'));
   $('btnUndo').addEventListener('click', undo);
