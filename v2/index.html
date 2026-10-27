@@ -90,6 +90,12 @@
   .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
   .steps { margin: 12px 0 0; }
   .target.far { animation: none; opacity: .75; }
+  .target.back { animation: none; }
+  .chaos {
+    margin-top: 8px; padding: 8px 12px; border-radius: 10px; font-weight: 600;
+    background: var(--block); border: 2px dashed var(--cup); color: var(--ink);
+  }
+  .chaos small { display: block; font-weight: 400; color: var(--muted); }
   .rules { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--block); font-size: 0.95rem; }
   .rules p { margin: 0; }
   .rules p + p { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
@@ -183,6 +189,8 @@
         <div class="controls">
           <button class="btn move" id="btnN">↑ North</button>
           <button class="btn move" id="btnE">→ East</button>
+          <button class="btn" id="btnS" hidden>↓ South</button>
+          <button class="btn" id="btnW" hidden>← West</button>
           <button class="btn" id="btnUndo">Undo</button>
           <button class="btn" id="btnNew">New game</button>
         </div>
@@ -257,14 +265,22 @@
       rules: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move 1 block North or East.',
       rulesLong: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move as many blocks as you like, but all North or all East.',
       hint: 'Tap a glowing corner, use the buttons, or press ↑ / →. Corners below the track are off limits.'
+    },
+    chaos: {
+      name: 'Chaos',
+      boards: ['3x2', '3x3', '5x4'],
+      chaos: true,
+      rules: 'Move 1 block North or East. But on every 3rd turn of the game (turns 3, 6, 9, and so on), you may step 1 block South or West instead. You can never step back onto Start.',
+      hint: 'Tap a glowing corner, use the buttons, or press the arrow keys. On a chaos turn, the dotted corners step back.'
     }
   };
+  const isChaosMode = () => !!MODES[mode].chaos;
   let railLong = false;  // Railroad mode with long moves turned on
   const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
   const isRail = () => !!MODES[mode].rail;
   const hasSolver = () => !!MODES[mode].solver;
-  const keysText = () => '↑ North · → East' + (isLong() ? ' · 1–9 picks how many blocks' : '') +
-    (hasSolver() ? ' · H hint' : '') + ' · U undo · R restart';
+  const keysText = () => '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
+    (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R restart';
   // Can the token stand on corner (x, y) in this mode?
   const cornerOk = (x, y) => !isRail() || y >= x;
 
@@ -292,6 +308,18 @@
   const playerForMove = i => (i % 2 === 0 ? 1 : 2);
   const currentPlayer = () => playerForMove(moves.length);
   const winner = () => playerForMove(moves.length - 1);
+  const turnNumber = () => moves.length + 1;
+  // Chaos turns are every 3rd turn of the game: 3, 6, 9, ...
+  const isChaosTurn = () => isChaosMode() && !isOver() && turnNumber() % 3 === 0;
+
+  // Backward moves allowed on a chaos turn: 1 block South or West. Never off the
+  // board, and never back onto Start.
+  function backMovesFrom(x, y) {
+    const out = [];
+    if (x >= 1) out.push({ d: 'W', k: 1, x: x - 1, y, back: true });
+    if (y >= 1) out.push({ d: 'S', k: 1, x, y: y - 1, back: true });
+    return out.filter(mv => !(mv.x === 0 && mv.y === 0));
+  }
 
   // Forward moves from corner (x, y) under the current mode. Each is { d, k, x, y }:
   // direction, number of blocks, and the corner you land on.
@@ -324,7 +352,8 @@
   function legalMoves() {
     if (isOver()) return [];
     const c = cur();
-    return forwardMovesFrom(c.x, c.y);
+    const out = forwardMovesFrom(c.x, c.y);
+    return isChaosTurn() ? out.concat(backMovesFrom(c.x, c.y)) : out;
   }
 
   // Solver for modes where the token only moves forward (no loops possible).
@@ -474,10 +503,13 @@
     if (!isOver()) {
       const col = PCLASS[currentPlayer()];
       legalMoves().forEach(mv => {
-        const cls = mv.k > 1 ? 'target far' : 'target';
+        // Backward (chaos) moves get a dotted ring and no fill so they look different.
+        const cls = mv.back ? 'target back' : (mv.k > 1 ? 'target far' : 'target');
         const r = mv.k > 1 ? 11 : 13;
-        const title = `Move ${DIRNAME[mv.d]}${mv.k > 1 ? ` ${mv.k} blocks` : ''}`;
-        s += `<circle class="${cls}" data-move="${mv.d}" data-k="${mv.k}" cx="${X(mv.x)}" cy="${Y(mv.y)}" r="${r}" style="fill:${col};stroke:${col}" fill-opacity=".18" stroke-width="2.5" stroke-dasharray="5 4"><title>${title}</title></circle>`;
+        const dash = mv.back ? '2 5' : '5 4';
+        const fillOp = mv.back ? '0' : '.18';
+        const title = `${mv.back ? 'Step back' : 'Move'} ${DIRNAME[mv.d]}${mv.k > 1 ? ` ${mv.k} blocks` : ''}`;
+        s += `<circle class="${cls}" data-move="${mv.d}" data-k="${mv.k}" cx="${X(mv.x)}" cy="${Y(mv.y)}" r="${r}" style="fill:${col};stroke:${col}" fill-opacity="${fillOp}" stroke-width="3" stroke-dasharray="${dash}"><title>${title}</title></circle>`;
       });
     }
 
@@ -513,15 +545,26 @@
         </div>`;
     } else {
       const p = currentPlayer();
+      let extra = '';
+      if (isChaosMode()) {
+        const t = turnNumber();
+        const until = 3 - (t % 3);
+        extra = isChaosTurn()
+          ? `<div class="chaos">Chaos turn! You may step back 1 block South or West.<small>Or move forward as usual.</small></div>`
+          : `<p class="togo">Turn ${t}. Next chaos turn in ${until} turn${until > 1 ? 's' : ''}.</p>`;
+      }
       $('turn').innerHTML = `
         <div class="turn"><span class="chip" style="background:${PCLASS[p]}"></span>Player ${p}'s turn</div>
-        <p class="togo">Blocks to go: ${togo}</p>`;
+        <p class="togo">Blocks to go: ${togo}</p>${extra}`;
     }
     const times = steps > 1 ? ` ×${steps}` : '';
     $('btnN').textContent = `↑ North${times}`;
     $('btnE').textContent = `→ East${times}`;
     $('btnN').disabled = !canMove('N', steps);
     $('btnE').disabled = !canMove('E', steps);
+    $('btnS').hidden = $('btnW').hidden = !isChaosMode();
+    $('btnS').disabled = !canMove('S', 1);
+    $('btnW').disabled = !canMove('W', 1);
     $('btnUndo').disabled = !moves.length || isOver();
     $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
     $('keys').textContent = `Keyboard: ${keysText()}`;
@@ -531,7 +574,7 @@
 
   function renderWord() {
     if (!moves.length) {
-      $('word').innerHTML = `<span class="empty">Each block walked adds a letter: N or E.</span>`;
+      $('word').innerHTML = `<span class="empty">Each block walked adds a letter: ${isChaosMode() ? 'N, E, S or W' : 'N or E'}.</span>`;
       return;
     }
     $('word').innerHTML = moves.map((mv, i) =>
@@ -543,7 +586,8 @@
     $('log').innerHTML = moves.map((mv, i) => {
       const p = path[i + 1];
       const times = mv.k > 1 ? ` ×${mv.k}` : '';
-      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${DIRNAME[mv.d]}${times} → (${p.x}, ${p.y})</li>`;
+      const back = mv.d === 'S' || mv.d === 'W' ? ' (chaos)' : '';
+      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${DIRNAME[mv.d]}${times}${back} → (${p.x}, ${p.y})</li>`;
     }).join('');
     $('logEmpty').hidden = moves.length > 0;
     const log = $('log');
@@ -623,6 +667,8 @@
 
   $('btnN').addEventListener('click', () => move('N', steps));
   $('btnE').addEventListener('click', () => move('E', steps));
+  $('btnS').addEventListener('click', () => move('S', 1));
+  $('btnW').addEventListener('click', () => move('W', 1));
   $('btnUndo').addEventListener('click', undo);
   $('btnNew').addEventListener('click', newGame);
   $('btnHint').addEventListener('click', showHint);
@@ -631,6 +677,8 @@
     const k = e.key;
     if (k === 'ArrowUp') { e.preventDefault(); move('N', steps); }
     else if (k === 'ArrowRight') { e.preventDefault(); move('E', steps); }
+    else if (k === 'ArrowDown') { e.preventDefault(); move('S', 1); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); move('W', 1); }
     else if (k === 'u' || k === 'U') undo();
     else if (k === 'r' || k === 'R') newGame();
     else if ((k === 'h' || k === 'H') && hasSolver() && !isOver()) showHint();
