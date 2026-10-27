@@ -126,6 +126,9 @@
     background: var(--btn-bg); border: 2px solid currentColor; font-weight: 600;
   }
   .win p { margin: 4px 0 0; font-weight: 400; color: var(--ink); font-size: 0.93rem; }
+  .why { margin-top: 8px; color: var(--ink); font-weight: 400; font-size: 0.93rem; }
+  .why summary { font-weight: 600; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+  .why p { margin: 6px 0 0; }
 
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
   .btn {
@@ -533,6 +536,23 @@
     box.hidden = counts.length <= 1;
   }
 
+  // Chaos mode surprise: stepping back never changes who wins. Opens by itself
+  // once a few games have been played on this board.
+  function whyNote() {
+    if (mode !== 'chaos') return '';
+    const total = n + m;
+    const odd = total % 2 === 1;
+    const open = scoreFor(sizeKey).games >= 2 ? ' open' : '';
+    return `<details class="why" id="why"${open}>
+      <summary>Why does the same player keep winning?</summary>
+      <p>Every move changes x + y by exactly 1. Forward adds 1. Stepping back takes 1 away.</p>
+      <p>Start has x + y = 0. Starbucks has x + y = ${n} + ${m} = ${total}. So the game always takes
+      an ${odd ? 'odd' : 'even'} number of moves: ${total}, ${total + 2}, ${total + 4}, and so on.</p>
+      <p>Player 1 makes the odd-numbered moves. Player 2 makes the even ones. So on this board
+      <strong>Player ${odd ? 1 : 2} wins every time</strong>. Chaos turns only make the game longer.</p>
+    </details>`;
+  }
+
   function renderTurn() {
     const togo = (n - cur().x) + (m - cur().y);
     if (isOver()) {
@@ -542,6 +562,7 @@
         <div class="win" style="color:${PCLASS[w]}">
           Coffee reached in ${moves.length} moves.
           <p>Play again on this board. Does the winner ever change? Then try a different board.</p>
+          ${whyNote()}
         </div>`;
     } else {
       const p = currentPlayer();
