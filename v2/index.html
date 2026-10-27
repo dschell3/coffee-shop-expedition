@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coffee Shop Expedition</title>
+<style>
+  /* Layout: board card on the left, game panel on the right; stacks to one column on phones */
+  :root {
+    --bg: #f5ede1;
+    --card: #fffaf3;
+    --ink: #3a281d;
+    --muted: #7a6555;
+    --line: #e1d3c0;
+    --block: #efe3d1;
+    --street: #cdb9a1;
+    --dot: #bba68d;
+    --axis: #9a8574;
+    --p1: #1f6f54;
+    --p2: #c0622b;
+    --cup: #6b4226;
+    --btn-bg: #ffffff;
+    --solid: #3a281d;
+    --solid-ink: #ffffff;
+    --token-ring: #ffffff;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1d1712; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
+      --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
+      --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
+      --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1d1712; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
+    --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
+    --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
+    --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 16px;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.45;
+  }
+  .wrap {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding-block: 20px 28px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header { text-align: center; padding-block: 8px 12px; }
+  h1 { margin: 0; font-size: 1.9rem; letter-spacing: -0.01em; text-wrap: balance; }
+  .sub { margin: 6px auto 0; color: var(--muted); max-width: 560px; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 840px) { main { grid-template-columns: 1fr; } }
+  aside { display: grid; gap: 14px; min-width: 0; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    min-width: 0;
+  }
+  h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+
+  .sizes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .sizes span { color: var(--muted); font-size: 0.9rem; margin-right: 4px; }
+  .size-btn {
+    border: 1px solid var(--line); background: var(--btn-bg); color: var(--ink);
+    padding: 6px 14px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+
+  #board svg { width: 100%; height: auto; display: block; max-height: 70vh; }
+  .blk { fill: var(--block); }
+  .street { stroke: var(--street); }
+  .dot { fill: var(--dot); }
+  .axis { fill: var(--axis); }
+  .lbl { fill: var(--ink); }
+  .cup-fill { fill: var(--cup); }
+  .cup-line { stroke: var(--cup); fill: none; }
+  .goal { fill: var(--card); stroke: var(--cup); }
+  .target { cursor: pointer; animation: pulse 1.3s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .target:hover { animation-play-state: paused; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.18); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .target { animation: none; } }
+  .hint { color: var(--muted); font-size: 0.88rem; margin: 8px 0 0; text-align: center; }
+
+  .turn { display: flex; align-items: center; gap: 10px; font-size: 1.25rem; font-weight: 700; }
+  .chip { width: 18px; height: 18px; border-radius: 50%; flex: none; }
+  .togo { color: var(--muted); margin: 4px 0 0; }
+  .win {
+    margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+    background: var(--btn-bg); border: 2px solid currentColor; font-weight: 600;
+  }
+  .win p { margin: 4px 0 0; font-weight: 400; color: var(--ink); font-size: 0.93rem; }
+
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+  .btn {
+    font: inherit; font-weight: 700; border-radius: 10px; padding: 12px 10px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--btn-bg); color: var(--ink);
+  }
+  .btn.move { font-size: 1.05rem; background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn:focus-visible, .size-btn:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
+  .keys { color: var(--muted); font-size: 0.82rem; margin: 8px 0 0; }
+
+  .word { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; letter-spacing: 0.12em; min-height: 1.8rem; word-break: break-all; }
+  .word .empty { color: var(--muted); font-weight: 400; font-size: 0.95rem; letter-spacing: 0; font-family: var(--font); }
+
+  ol#log { margin: 0; padding-left: 22px; max-height: 190px; overflow-y: auto; font-size: 0.93rem; }
+  ol#log li { margin: 2px 0; }
+  .muted { color: var(--muted); font-size: 0.9rem; margin: 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  tr.current td { font-weight: 700; }
+
+  details summary { cursor: pointer; font-weight: 600; }
+  details ol { padding-left: 20px; margin: 8px 0 0; font-size: 0.93rem; }
+  footer { text-align: center; color: var(--muted); font-size: 0.82rem; padding-top: 16px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>The Coffee Shop Expedition</h1>
+    <p class="sub">Take turns walking one block North or East. Whoever steps into the coffee shop wins.</p>
+  </header>
+
+  <main>
+    <section class="card" aria-label="Game board">
+      <div class="sizes" role="group" aria-label="Board size">
+        <span>Board:</span>
+        <button class="size-btn" id="size-3x2" data-size="3x2">3 × 2</button>
+        <button class="size-btn" id="size-3x3" data-size="3x3">3 × 3</button>
+        <button class="size-btn" id="size-5x4" data-size="5x4">5 × 4</button>
+      </div>
+      <div id="board"></div>
+      <p class="hint">Tap a glowing corner, use the buttons, or press ↑ / →.</p>
+    </section>
+
+    <aside>
+      <section class="card" aria-live="polite">
+        <div id="turn"></div>
+        <div class="controls">
+          <button class="btn move" id="btnN">↑ North</button>
+          <button class="btn move" id="btnE">→ East</button>
+          <button class="btn" id="btnUndo">Undo</button>
+          <button class="btn" id="btnNew">New game</button>
+        </div>
+        <p class="keys">Keyboard: ↑ North · → East · U undo · R restart</p>
+      </section>
+
+      <section class="card">
+        <h2>Route so far</h2>
+        <div class="word" id="word"></div>
+      </section>
+
+      <section class="card">
+        <h2>Move log</h2>
+        <ol id="log"></ol>
+        <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
+      </section>
+
+      <section class="card">
+        <h2>Scoreboard</h2>
+        <table>
+          <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th></tr></thead>
+          <tbody id="scores"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <details>
+          <summary>How to play</summary>
+          <ol>
+            <li>The token starts at the bottom-left corner. The coffee shop is at the top-right corner.</li>
+            <li>Players take turns. Player 1 goes first.</li>
+            <li>On your turn, move one block North (↑) or East (→). No diagonals and no going back.</li>
+            <li>Whoever moves the token into the coffee shop wins.</li>
+          </ol>
+        </details>
+      </section>
+    </aside>
+  </main>
+
+  <footer>Rough prototype · MATH 101 Combinatorial Games Project</footer>
+</div>
+
+<script>
+(function () {
+  const PCLASS = { 1: 'var(--p1)', 2: 'var(--p2)' };
+  const SIZES = { '3x2': [3, 2], '3x3': [3, 3], '5x4': [5, 4] };
+
+  let sizeKey = '3x2';
+  let n = 3, m = 2;
+  let path = [{ x: 0, y: 0 }];
+  let moves = [];
+  const scores = {};
+  Object.keys(SIZES).forEach(k => { scores[k] = { games: 0, p1: 0, p2: 0 }; });
+
+  const $ = id => document.getElementById(id);
+  const cur = () => path[path.length - 1];
+  const isOver = () => cur().x === n && cur().y === m;
+  const playerForMove = i => (i % 2 === 0 ? 1 : 2);
+  const currentPlayer = () => playerForMove(moves.length);
+  const winner = () => playerForMove(moves.length - 1);
+
+  function canMove(d) {
+    if (isOver()) return false;
+    const c = cur();
+    return d === 'E' ? c.x < n : c.y < m;
+  }
+
+  function move(d) {
+    if (!canMove(d)) return;
+    const c = cur();
+    path.push(d === 'E' ? { x: c.x + 1, y: c.y } : { x: c.x, y: c.y + 1 });
+    moves.push(d);
+    if (isOver()) {
+      const s = scores[sizeKey];
+      s.games++;
+      if (winner() === 1) s.p1++; else s.p2++;
+    }
+    render();
+  }
+
+  function undo() {
+    if (!moves.length || isOver()) return;
+    path.pop();
+    moves.pop();
+    render();
+  }
+
+  function newGame() {
+    path = [{ x: 0, y: 0 }];
+    moves = [];
+    render();
+  }
+
+  function setSize(key) {
+    sizeKey = key;
+    [n, m] = SIZES[key];
+    newGame();
+  }
+
+  function cupIcon(cx, cy) {
+    const x = cx - 15, y = cy - 52;
+    return `<g transform="translate(${x} ${y})" aria-hidden="true">
+      <path class="cup-line" d="M10 2 q-3 4 0 8 q3 4 0 8" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+      <path class="cup-line" d="M18 2 q-3 4 0 8 q3 4 0 8" stroke-width="2" stroke-linecap="round" opacity=".7"/>
+      <path class="cup-fill" d="M4 20 h22 v9 a8 8 0 0 1 -8 8 h-6 a8 8 0 0 1 -8 -8 z"/>
+      <path class="cup-line" d="M26 23 h3 a4 4 0 0 1 0 8 h-3" stroke-width="2.5"/>
+      <rect class="cup-fill" x="0" y="38" width="30" height="3" rx="1.5"/>
+    </g>`;
+  }
+
+  function renderBoard() {
+    const cell = 90, padL = 64, padR = 72, padT = 88, padB = 76;
+    const W = n * cell + padL + padR, H = m * cell + padT + padB;
+    const X = x => padL + x * cell;
+    const Y = y => padT + (m - y) * cell;
+    const c = cur();
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).">`;
+
+    for (let x = 0; x < n; x++) for (let y = 0; y < m; y++) {
+      s += `<rect class="blk" x="${X(x) + 9}" y="${Y(y + 1) + 9}" width="${cell - 18}" height="${cell - 18}" rx="9"/>`;
+    }
+    for (let x = 0; x <= n; x++) s += `<line class="street" x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(m)}" stroke-width="3" stroke-linecap="round"/>`;
+    for (let y = 0; y <= m; y++) s += `<line class="street" x1="${X(0)}" y1="${Y(y)}" x2="${X(n)}" y2="${Y(y)}" stroke-width="3" stroke-linecap="round"/>`;
+
+    for (let x = 0; x <= n; x++) s += `<text class="axis" x="${X(x)}" y="${Y(0) + 34}" text-anchor="middle" font-size="13">${x}</text>`;
+    for (let y = 1; y <= m; y++) s += `<text class="axis" x="${X(0) - 26}" y="${Y(y) + 4}" text-anchor="end" font-size="13">${y}</text>`;
+    s += `<text class="lbl" x="${X(0)}" y="${Y(0) + 56}" text-anchor="middle" font-size="14" font-weight="700">Start</text>`;
+    s += `<text class="axis" x="${(X(0) + X(n)) / 2}" y="${Y(0) + 56}" text-anchor="middle" font-size="12">East →</text>`;
+
+    for (let i = 0; i < moves.length; i++) {
+      const a = path[i], b = path[i + 1];
+      s += `<line x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(b.x)}" y2="${Y(b.y)}" style="stroke:${PCLASS[playerForMove(i)]}" stroke-width="8" stroke-linecap="round"/>`;
+    }
+
+    for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) {
+      s += `<circle class="dot" cx="${X(x)}" cy="${Y(y)}" r="3.5"/>`;
+    }
+
+    s += cupIcon(X(n), Y(m));
+    s += `<circle class="goal" cx="${X(n)}" cy="${Y(m)}" r="10" stroke-width="3"/>`;
+    s += `<text class="lbl" x="${X(n) - 26}" y="${Y(m) - 22}" text-anchor="end" font-size="14" font-weight="700">Starbucks (${n}, ${m})</text>`;
+
+    if (!isOver()) {
+      const col = PCLASS[currentPlayer()];
+      [['E', c.x + 1, c.y], ['N', c.x, c.y + 1]].forEach(([d, tx, ty]) => {
+        if (!canMove(d)) return;
+        s += `<circle class="target" data-move="${d}" cx="${X(tx)}" cy="${Y(ty)}" r="13" style="fill:${col};stroke:${col}" fill-opacity=".18" stroke-width="2.5" stroke-dasharray="5 4"><title>Move ${d === 'E' ? 'East' : 'North'}</title></circle>`;
+      });
+    }
+
+    const tokenColor = isOver() ? PCLASS[winner()] : PCLASS[currentPlayer()];
+    s += `<circle cx="${X(c.x)}" cy="${Y(c.y)}" r="15" style="fill:${tokenColor};stroke:var(--token-ring)" stroke-width="4"/>`;
+
+    s += `</svg>`;
+    $('board').innerHTML = s;
+    $('board').querySelectorAll('.target').forEach(el => {
+      el.addEventListener('click', () => move(el.dataset.move));
+    });
+  }
+
+  function renderTurn() {
+    const togo = (n - cur().x) + (m - cur().y);
+    if (isOver()) {
+      const w = winner();
+      $('turn').innerHTML = `
+        <div class="turn"><span class="chip" style="background:${PCLASS[w]}"></span>Player ${w} wins!</div>
+        <div class="win" style="color:${PCLASS[w]}">
+          Coffee reached in ${moves.length} moves.
+          <p>Play again on this board. Does the winner ever change? Then try a different board.</p>
+        </div>`;
+    } else {
+      const p = currentPlayer();
+      $('turn').innerHTML = `
+        <div class="turn"><span class="chip" style="background:${PCLASS[p]}"></span>Player ${p}'s turn</div>
+        <p class="togo">Blocks to go: ${togo}</p>`;
+    }
+    $('btnN').disabled = !canMove('N');
+    $('btnE').disabled = !canMove('E');
+    $('btnUndo').disabled = !moves.length || isOver();
+    $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
+  }
+
+  function renderWord() {
+    if (!moves.length) {
+      $('word').innerHTML = `<span class="empty">Each move adds a letter: N or E.</span>`;
+      return;
+    }
+    $('word').innerHTML = moves.map((d, i) =>
+      `<span style="color:${PCLASS[playerForMove(i)]}" title="Move ${i + 1}, Player ${playerForMove(i)}">${d}</span>`
+    ).join('');
+  }
+
+  function renderLog() {
+    $('log').innerHTML = moves.map((d, i) => {
+      const p = path[i + 1];
+      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${d === 'E' ? 'East' : 'North'} → (${p.x}, ${p.y})</li>`;
+    }).join('');
+    $('logEmpty').hidden = moves.length > 0;
+    const log = $('log');
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function renderScores() {
+    $('scores').innerHTML = Object.keys(SIZES).map(k => {
+      const s = scores[k];
+      const [a, b] = SIZES[k];
+      return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td></tr>`;
+    }).join('');
+  }
+
+  function renderSizes() {
+    document.querySelectorAll('.size-btn').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.size === sizeKey ? 'true' : 'false');
+    });
+  }
+
+  function render() {
+    renderSizes();
+    renderBoard();
+    renderTurn();
+    renderWord();
+    renderLog();
+    renderScores();
+  }
+
+  document.querySelectorAll('.size-btn').forEach(b => b.addEventListener('click', () => setSize(b.dataset.size)));
+  $('btnN').addEventListener('click', () => move('N'));
+  $('btnE').addEventListener('click', () => move('E'));
+  $('btnUndo').addEventListener('click', undo);
+  $('btnNew').addEventListener('click', newGame);
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input, textarea')) return;
+    const k = e.key;
+    if (k === 'ArrowUp') { e.preventDefault(); move('N'); }
+    else if (k === 'ArrowRight') { e.preventDefault(); move('E'); }
+    else if (k === 'u' || k === 'U') undo();
+    else if (k === 'r' || k === 'R') newGame();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
