@@ -132,9 +132,6 @@
     background: var(--btn-bg); border: 2px solid currentColor; font-weight: 600;
   }
   .win p { margin: 4px 0 0; font-weight: 400; color: var(--ink); font-size: 0.93rem; }
-  .why { margin-top: 8px; color: var(--ink); font-weight: 400; font-size: 0.93rem; }
-  .why summary { font-weight: 600; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
-  .why p { margin: 6px 0 0; }
 
   .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
   .btn {
@@ -279,13 +276,6 @@
       name: 'Chaos',
       boards: ['3x2', '3x3', '5x4'],
       chaos: true,
-      rules: 'Move 1 block North or East. But on every 3rd turn of the game (turns 3, 6, 9, and so on), you may step 1 block South or West instead. You can never step back onto Start.',
-      hint: 'Tap a glowing corner, use the buttons, or press the arrow keys. On a chaos turn, the dotted corners step back.'
-    },
-    chaosLong: {
-      name: 'Chaos + long',
-      boards: ['3x2', '3x3', '5x4'],
-      chaos: true,
       long: true,
       rules: 'Long moves: go as far as you like, all North or all East. On every 3rd turn (3, 6, 9, and so on), you may step back South or West instead. Never back onto Start.',
       hint: 'Tap any glowing corner. Dotted corners step back on a chaos turn. This mode is an experiment, so try each setting.'
@@ -293,7 +283,7 @@
   };
   const isChaosMode = () => !!MODES[mode].chaos;
 
-  // Chaos + long moves could loop forever. These settings stop that. Try each one.
+  // Chaos moves could loop forever. These settings stop that. Try each one.
   const CHAOS_RULES = {
     cap: { label: 'Back moves are 1 block', text: 'Back moves are only 1 block. Forward moves can still be long.' },
     tokens: { label: '2 chaos moves each', text: 'Each player gets only 2 chaos moves per game, shown as cups. Back moves can be long.' },
@@ -302,7 +292,7 @@
   const CHAOS_TOKENS = 2;
   const TURN_LIMIT = 30;
   let chaosRule = 'cap';
-  const chaosRuleNow = () => (mode === 'chaosLong' ? chaosRule : 'cap');
+  const chaosRuleNow = () => chaosRule;
   let railLong = false;  // Railroad mode with long moves turned on
   const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
   const isRail = () => !!MODES[mode].rail;
@@ -348,7 +338,7 @@
   const chaosLeft = p => CHAOS_TOKENS - chaosUsed(p);
 
   // Backward moves allowed on a chaos turn: South or West. Never off the board,
-  // and never back onto Start. Back moves are 1 block unless a Chaos + long
+  // and never back onto Start. Back moves are 1 block unless a Chaos
   // setting says they can be long.
   function backMovesFrom(x, y) {
     const rule = chaosRuleNow();
@@ -581,23 +571,6 @@
     box.hidden = counts.length <= 1;
   }
 
-  // Chaos mode surprise: stepping back never changes who wins. Opens by itself
-  // once a few games have been played on this board.
-  function whyNote() {
-    if (mode !== 'chaos') return '';
-    const total = n + m;
-    const odd = total % 2 === 1;
-    const open = scoreFor(sizeKey).games >= 2 ? ' open' : '';
-    return `<details class="why" id="why"${open}>
-      <summary>Why does the same player keep winning?</summary>
-      <p>Every move changes x + y by exactly 1. Forward adds 1. Stepping back takes 1 away.</p>
-      <p>Start has x + y = 0. Starbucks has x + y = ${n} + ${m} = ${total}. So the game always takes
-      an ${odd ? 'odd' : 'even'} number of moves: ${total}, ${total + 2}, ${total + 4}, and so on.</p>
-      <p>Player 1 makes the odd-numbered moves. Player 2 makes the even ones. So on this board
-      <strong>Player ${odd ? 1 : 2} wins every time</strong>. Chaos turns only make the game longer.</p>
-    </details>`;
-  }
-
   function renderTurn() {
     const togo = (n - cur().x) + (m - cur().y);
     if (isDraw()) {
@@ -614,7 +587,6 @@
         <div class="win" style="color:${PCLASS[w]}">
           Coffee reached in ${moves.length} moves.
           <p>Play again on this board. Does the winner ever change? Then try a different board.</p>
-          ${whyNote()}
         </div>`;
     } else {
       const p = currentPlayer();
@@ -685,7 +657,7 @@
 
   function renderScores() {
     $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
-    const showDraws = mode === 'chaosLong';
+    const showDraws = isChaosMode();
     $('drawHead').hidden = !showDraws;
     $('scores').innerHTML = MODES[mode].boards.map(k => {
       const s = scoreFor(k);
@@ -724,7 +696,7 @@
       count = `This board has ${all} routes in all. Only ${ok} of them stay on or above the track.`;
     }
     let rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
-    if (mode === 'chaosLong') rules += ' ' + CHAOS_RULES[chaosRule].text;
+    if (isChaosMode()) rules += ' ' + CHAOS_RULES[chaosRule].text;
     $('rules').innerHTML = `<p>${rules}</p><p>${count}</p>`;
     $('boardHint').textContent = MODES[mode].hint;
   }
@@ -742,7 +714,7 @@
       b.addEventListener('click', () => setRailLong(!railLong));
       box.appendChild(b);
     }
-    if (mode === 'chaosLong') {
+    if (isChaosMode()) {
       const label = document.createElement('label');
       label.className = 'opt';
       label.textContent = 'To stop endless games: ';
@@ -870,17 +842,19 @@
   // Railroad with 1-block moves: every game takes 2n moves, so Player 2 always wins.
   [3, 4, 5].forEach(k => check(`railroad ${k}×${k} is a Player 2 win`, T.losingAt({ mode: 'rail', n: k, m: k }, 0, 0), true));
 
-  // Chaos with 1-block moves keeps the same parity, so the same winner. Play random games.
+  // Chaos mode must always end under each setting. Play random games and watch the move count.
   [[3, 2], [3, 3], [5, 4]].forEach(([n, m]) => {
-    const want = (n + m) % 2 === 1 ? 1 : 2;
-    let ok = true, longest = 0;
-    for (let g = 0; g < 40; g++) {
-      const r = T.randomGame({ mode: 'chaos', n, m });
-      if (r.winner !== want || r.moves % 2 !== (n + m) % 2) ok = false;
-      longest = Math.max(longest, r.moves);
-    }
-    check(`chaos winner on ${n}×${m} over 40 random games`, ok, true);
-    check(`chaos games end on ${n}×${m} (longest ${longest} moves)`, longest < 200, true);
+    ['cap', 'tokens', 'limit'].forEach(rule => {
+      let longest = 0, draws = 0;
+      for (let g = 0; g < 40; g++) {
+        const r = T.randomGame({ mode: 'chaos', n, m, chaosRule: rule });
+        longest = Math.max(longest, r.moves);
+        if (r.winner === 0) draws++;
+      }
+      const limit = rule === 'limit' ? 30 : 200;
+      check(`chaos (${rule}) ends on ${n}×${m} (longest ${longest} moves)`, longest <= limit, true);
+      if (rule !== 'limit') check(`chaos (${rule}) never ends in a draw on ${n}×${m}`, draws, 0);
+    });
   });
 
   console.log(`Self-check: ${pass} of ${pass + fail} passed${fail ? '. See errors above.' : '.'}`);
