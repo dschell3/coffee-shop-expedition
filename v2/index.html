@@ -796,7 +796,94 @@
     else if (isLong() && /^[1-9]$/.test(k)) setSteps(Number(k));
   });
 
+  // Hooks for the self-check script below. They run the real game code on a
+  // temporary board, then put the live game back the way it was.
+  function withState(opts, fn) {
+    const saved = { mode, sizeKey, n, m, path, moves, railLong, chaosRule };
+    mode = opts.mode; n = opts.n; m = opts.m; sizeKey = `${n}x${m}`;
+    railLong = !!opts.railLong; chaosRule = opts.chaosRule || 'cap';
+    path = [{ x: 0, y: 0 }]; moves = [];
+    try { return fn(); }
+    finally { ({ mode, sizeKey, n, m, path, moves, railLong, chaosRule } = saved); }
+  }
+  window.CoffeeShopCheck = {
+    countPaths,
+    // Is corner (x, y) a loss for the player who must move from it?
+    losingAt: (opts, x, y) => withState(opts, () => makeSolver()(x, y)),
+    // Play one game with random legal moves. Returns the winner and the move count.
+    randomGame: opts => withState(opts, () => {
+      while (!isOver()) {
+        const all = legalMoves();
+        const mv = all[Math.floor(Math.random() * all.length)];
+        path.push({ x: mv.x, y: mv.y });
+        moves.push({ d: mv.d, k: mv.k });
+      }
+      return { winner: isDraw() ? 0 : winner(), moves: moves.length };
+    })
+  };
+
   render();
+})();
+</script>
+
+<script>
+// Self-check for the math facts in our write-up. Open the browser console to see
+// the result. Nothing here is hard-coded: every value is computed by the game code.
+(function () {
+  const T = window.CoffeeShopCheck;
+  if (!T) return;
+  let pass = 0, fail = 0;
+  const check = (name, got, want) => {
+    if (got === want) { pass++; return; }
+    fail++;
+    console.error(`Self-check FAILED: ${name}. Got ${got}, wanted ${want}.`);
+  };
+  const any = () => true;
+  const aboveTrack = (x, y) => y >= x;
+
+  // Paths on an n×m board: C(n + m, m).
+  check('paths on 2×2', T.countPaths(2, 2, any), 6);
+  check('paths on 3×2', T.countPaths(3, 2, any), 10);
+  check('paths on 3×3', T.countPaths(3, 3, any), 20);
+  check('paths on 5×4', T.countPaths(5, 4, any), 126);
+
+  // Corner rule: paths(x, y) = paths(x − 1, y) + paths(x, y − 1), with 1s on the edges.
+  check('bottom row is 1s', T.countPaths(4, 0, any), 1);
+  check('left column is 1s', T.countPaths(0, 3, any), 1);
+  check('corner rule at (2, 1)', T.countPaths(2, 1, any), T.countPaths(1, 1, any) + T.countPaths(2, 0, any));
+  check('corner rule at (3, 2)', T.countPaths(3, 2, any), T.countPaths(2, 2, any) + T.countPaths(3, 1, any));
+
+  // Catalan numbers: paths that stay on or above the track, n = 0 to 5.
+  [1, 1, 2, 5, 14, 42].forEach((want, k) => check(`Catalan ${k}`, T.countPaths(k, k, aboveTrack), want));
+
+  // Classic winner: n + m odd means Player 1 wins, even means Player 2.
+  [[3, 2], [3, 3], [5, 4], [4, 4], [5, 5]].forEach(([n, m]) => {
+    const p1Loses = T.losingAt({ mode: 'classic', n, m }, 0, 0);
+    check(`classic winner on ${n}×${m}`, p1Loses ? 2 : 1, (n + m) % 2 === 1 ? 1 : 2);
+  });
+
+  // Long moves: equal blocks left East and North is a loss for the player to move.
+  for (let x = 0; x <= 5; x++) for (let y = 0; y <= 4; y++) {
+    check(`long moves at (${x}, ${y})`, T.losingAt({ mode: 'long', n: 5, m: 4 }, x, y), (5 - x) === (4 - y));
+  }
+
+  // Railroad with 1-block moves: every game takes 2n moves, so Player 2 always wins.
+  [3, 4, 5].forEach(k => check(`railroad ${k}×${k} is a Player 2 win`, T.losingAt({ mode: 'rail', n: k, m: k }, 0, 0), true));
+
+  // Chaos with 1-block moves keeps the same parity, so the same winner. Play random games.
+  [[3, 2], [3, 3], [5, 4]].forEach(([n, m]) => {
+    const want = (n + m) % 2 === 1 ? 1 : 2;
+    let ok = true, longest = 0;
+    for (let g = 0; g < 40; g++) {
+      const r = T.randomGame({ mode: 'chaos', n, m });
+      if (r.winner !== want || r.moves % 2 !== (n + m) % 2) ok = false;
+      longest = Math.max(longest, r.moves);
+    }
+    check(`chaos winner on ${n}×${m} over 40 random games`, ok, true);
+    check(`chaos games end on ${n}×${m} (longest ${longest} moves)`, longest < 200, true);
+  });
+
+  console.log(`Self-check: ${pass} of ${pass + fail} passed${fail ? '. See errors above.' : '.'}`);
 })();
 </script>
 </body>
