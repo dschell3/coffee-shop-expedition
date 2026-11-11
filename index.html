@@ -347,7 +347,8 @@
   ];
   let puzzle = { level: 0, stage: 0, found: [], filled: {}, msg: '' };
   let savedBoard = null;   // the two-player board to go back to after puzzles
-  const isFillLevel = () => isPuzzle() && puzzle.level === 1;
+  const isFillLevel = () => isPuzzle() && puzzle.level >= 1;
+  const isRailLevel = () => isPuzzle() && puzzle.level === 2;
   const levelNow = () => LEVELS[puzzle.level];
 
   // Chaos moves could loop forever. These settings stop that. Try each one.
@@ -362,7 +363,7 @@
   const chaosRuleNow = () => chaosRule;
   let railLong = false;  // Railroad mode with long moves turned on
   const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
-  const isRail = () => !!MODES[mode].rail;
+  const isRail = () => !!MODES[mode].rail || isRailLevel();
   const hasSolver = () => !!MODES[mode].solver;
   const keysText = () => isPuzzle() ? '↑ North · → East · U undo' : '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
     (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R play again · B change board';
@@ -630,11 +631,22 @@
       puzzle.filled[key(x, y)] = want;
       puzzle.asking = null;
       puzzle.msg = `Right. ${want} route${want === 1 ? '' : 's'} reach (${x}, ${y}).`;
-      if (stageDone()) puzzle.msg = `<strong>${want} routes reach Starbucks.</strong> Same as ${chooseText(n + m, m).split(' = ')[0]}.`;
+      if (stageDone()) {
+        puzzle.msg = isRailLevel()
+          ? `<strong>${want} route${want === 1 ? '' : 's'} stay${want === 1 ? 's' : ''} on or above the track.</strong>`
+          : `<strong>${want} routes reach Starbucks.</strong> Same as ${chooseText(n + m, m).split(' = ')[0]}.`;
+        if (isRailLevel() && lastStage()) {
+          const all = levelNow().boards.map(([k]) => countPaths(k, k, (x, y) => y >= x));
+          puzzle.msg += ` <strong>${all.join(', ')}.</strong> These are called Catalan numbers. Each square board gives the next one.`;
+        }
+      }
     } else {
-      const below = cornerOk(x, y - 1) ? filledAt(x, y - 1) : 0;
+      const belowOk = cornerOk(x, y - 1);
+      const below = belowOk ? filledAt(x, y - 1) : 0;
       const left = cornerOk(x - 1, y) ? filledAt(x - 1, y) : 0;
-      puzzle.msg = `Not quite. Add the corner below (${below}) and the corner to the left (${left}).`;
+      puzzle.msg = belowOk
+        ? `Not quite. Add the corner below (${below}) and the corner to the left (${left}).`
+        : `Not quite. The corner below is under the track, so it counts 0. Add that to the corner on the left (${left}).`;
     }
     render();
     const again = $('answer');
@@ -761,9 +773,10 @@
       }
     }
 
-    s += cupIcon(X(n), Y(m));
-    s += `<circle class="goal" cx="${X(n)}" cy="${Y(m)}" r="10" stroke-width="3"/>`;
-    s += `<text class="lbl" x="${X(n) - 26}" y="${Y(m) - 22}" text-anchor="end" font-size="14" font-weight="700">Starbucks (${n}, ${m})</text>`;
+    const lift = isFillLevel() ? 16 : 0;
+    s += cupIcon(X(n), Y(m) - lift);
+    if (!isFillLevel()) s += `<circle class="goal" cx="${X(n)}" cy="${Y(m)}" r="10" stroke-width="3"/>`;
+    s += `<text class="lbl" x="${X(n) - 26}" y="${Y(m) - 22 - lift}" text-anchor="end" font-size="14" font-weight="700">Starbucks (${n}, ${m})</text>`;
 
     if (!isOver()) {
       const col = colorFor(moves.length);
@@ -844,7 +857,8 @@
     }
     if (isFillLevel()) {
       const total = Object.keys(puzzle.filled).length;
-      const all = (n + 1) * (m + 1);
+      let all = 0;
+      for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) if (cornerOk(x, y)) all++;
       const ask = puzzle.asking
         ? `<form class="ask-form" id="askForm"><label for="answer">How many routes reach (${puzzle.asking.x}, ${puzzle.asking.y})?</label>
            <div class="ask-row"><input id="answer" type="number" inputmode="numeric" min="0" step="1" autocomplete="off"><button class="btn" type="submit" id="btnCheck">Check</button></div></form>`
@@ -852,7 +866,7 @@
       status = `<p><strong>${total} of ${all} corners filled.</strong> ${stage}</p>${puzzle.msg ? `<p>${puzzle.msg}</p>` : ''}${ask}`;
       if (stageDone()) {
         next = lastStage()
-          ? `<p class="togo">Level done. Try level ${puzzle.level + 2}.</p>`
+          ? `<p class="togo">${puzzle.level === LEVELS.length - 1 ? 'Level done. That was the last puzzle.' : `Level done. Try level ${puzzle.level + 2}.`}</p>`
           : `<button class="btn" id="btnNext">Next board: ${L.boards[puzzle.stage + 1].join(' × ')}</button>`;
       }
     }
