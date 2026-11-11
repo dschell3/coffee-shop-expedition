@@ -147,6 +147,8 @@
   }
   .btn.move { font-size: 1.05rem; background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
   .btn.wide { grid-column: 1 / -1; }
+  .puzzle-status { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--block); font-size: 0.95rem; }
+  .puzzle-status .togo { display: block; margin-top: 4px; font-size: 0.9rem; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn:focus-visible, .size-btn:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
   .keys { color: var(--muted); font-size: 0.82rem; margin: 8px 0 0; }
@@ -205,6 +207,9 @@
 
     <aside>
       <section class="card" aria-live="polite">
+        <div class="sizes steps" role="group" aria-label="Puzzle level" id="levels" hidden>
+          <span>Level:</span>
+        </div>
         <div id="turn"></div>
         <div class="sizes steps" role="group" aria-label="How many blocks to move" id="steps" hidden>
           <span>Blocks:</span>
@@ -217,6 +222,7 @@
           <button class="btn" id="btnUndo">Undo</button>
           <button class="btn" id="btnNew">Play again</button>
           <button class="btn wide" id="btnBoard">Change board</button>
+          <button class="btn wide" id="btnPuzzleReset" hidden>Reset this level</button>
         </div>
         <p class="keys" id="keys"></p>
         <div class="hintbox" id="hintBox" hidden>
@@ -232,7 +238,7 @@
         </div>
       </details>
 
-      <details class="card fold">
+      <details class="card fold" id="logCard">
         <summary><h2>Move log</h2></summary>
         <div class="body">
           <ol id="log"></ol>
@@ -240,7 +246,7 @@
         </div>
       </details>
 
-      <details class="card fold">
+      <details class="card fold" id="scoreCard">
         <summary><h2 id="scoreTitle">Scoreboard</h2></summary>
         <div class="body">
           <table>
@@ -299,9 +305,26 @@
       long: true,
       rules: 'Long moves: go as far as you like, all North or all East. On every 3rd turn (3, 6, 9, and so on), you may step back South or West instead. Never back onto Start.',
       hint: 'Tap any glowing corner. Dotted corners step back on a chaos turn. This mode is an experiment, so try each setting.'
+    },
+    puzzle: {
+      name: 'Puzzles',
+      puzzle: true,
+      rules: 'One player. Three short puzzles that show the math behind the game.',
+      hint: 'Pick a level: 1, 2 or 3.'
     }
   };
   const isChaosMode = () => !!MODES[mode].chaos;
+  const isPuzzle = () => !!MODES[mode].puzzle;
+
+  // Puzzle levels. Each level fixes its own boards, played in order.
+  const LEVELS = [
+    { name: 'Find every path', boards: [[2, 2], [3, 2]], about: 'Trace every different route from Start to Starbucks.' },
+    { name: 'Fill in the corners', boards: [[3, 3]], about: 'Work out how many routes reach each corner.' },
+    { name: 'Railroad', boards: [[2, 2], [3, 3], [4, 4]], about: 'Count the routes that stay on or above the track.' }
+  ];
+  let puzzle = { level: 0, stage: 0, found: [], filled: {}, msg: '' };
+  let savedBoard = null;   // the two-player board to go back to after puzzles
+  const levelNow = () => LEVELS[puzzle.level];
 
   // Chaos moves could loop forever. These settings stop that. Try each one.
   const CHAOS_RULES = {
@@ -317,7 +340,7 @@
   const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
   const isRail = () => !!MODES[mode].rail;
   const hasSolver = () => !!MODES[mode].solver;
-  const keysText = () => '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
+  const keysText = () => isPuzzle() ? '↑ North · → East · U undo' : '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
     (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R play again · B change board';
   // Can the token stand on corner (x, y) in this mode?
   const cornerOk = (x, y) => !isRail() || y >= x;
@@ -352,6 +375,8 @@
   const isDraw = () => !atGoal() && chaosRuleNow() === 'limit' && moves.length >= TURN_LIMIT;
   const isOver = () => atGoal() || isDraw();
   const playerForMove = i => (i % 2 === 0 ? 1 : 2);
+  // Puzzles are one player, so everything is drawn in Player 1's color.
+  const colorFor = i => (isPuzzle() ? PCLASS[1] : PCLASS[playerForMove(i)]);
   const currentPlayer = () => playerForMove(moves.length);
   const winner = () => playerForMove(moves.length - 1);
   const turnNumber = () => moves.length + 1;
@@ -407,6 +432,7 @@
 
   function legalMoves() {
     if (isOver()) return [];
+    if (isPuzzle()) return [];
     const c = cur();
     const out = forwardMovesFrom(c.x, c.y);
     return isChaosTurn() ? out.concat(backMovesFrom(c.x, c.y)) : out;
@@ -459,7 +485,7 @@
     steps = 1;
     hintText = '';
     setup = false;
-    if (isOver()) {
+    if (isOver() && !isPuzzle()) {
       const s = scoreFor(boardKey());
       s.games++;
       if (isDraw()) s.draws++;
@@ -493,6 +519,7 @@
 
   // Put Starbucks at corner (w, h). Railroad boards are always square.
   function setBoard(w, h) {
+    if (isPuzzle()) return;
     const clamp = v => Math.max(1, Math.min(MAXB, v));
     n = clamp(w);
     m = isRail() ? n : clamp(h);
@@ -500,8 +527,25 @@
   }
 
   function changeBoard() {
+    if (isPuzzle()) return;
     setup = true;
     newGame();
+  }
+
+  // Puzzle levels pick their own board. Progress within a level is kept until reset.
+  function applyLevel() {
+    [n, m] = levelNow().boards[puzzle.stage];
+    setup = false;
+    newGame();
+  }
+
+  function setLevel(i) {
+    puzzle = { level: i, stage: 0, found: [], filled: {}, msg: '' };
+    applyLevel();
+  }
+
+  function resetLevel() {
+    setLevel(puzzle.level);
   }
 
   function setRailLong(on) {
@@ -515,7 +559,15 @@
   }
 
   function setMode(key) {
+    const wasPuzzle = isPuzzle();
     mode = key;
+    // Puzzles pick their own boards, so remember the player's board and bring it back after.
+    if (isPuzzle()) {
+      if (!wasPuzzle) savedBoard = { n, m };
+      applyLevel();
+      return;
+    }
+    if (wasPuzzle && savedBoard) ({ n, m } = savedBoard);
     // Railroad needs a square board, so square it up if needed.
     if (isRail() && n !== m) m = n;
     newGame();
@@ -566,7 +618,7 @@
 
     for (let i = 0; i < moves.length; i++) {
       const a = path[i], b = path[i + 1];
-      s += `<line x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(b.x)}" y2="${Y(b.y)}" style="stroke:${PCLASS[playerForMove(i)]}" stroke-width="8" stroke-linecap="round"/>`;
+      s += `<line x1="${X(a.x)}" y1="${Y(a.y)}" x2="${X(b.x)}" y2="${Y(b.y)}" style="stroke:${colorFor(i)}" stroke-width="8" stroke-linecap="round"/>`;
     }
 
     for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) {
@@ -595,7 +647,7 @@
     s += `<text class="lbl" x="${X(n) - 26}" y="${Y(m) - 22}" text-anchor="end" font-size="14" font-weight="700">Starbucks (${n}, ${m})</text>`;
 
     if (!isOver()) {
-      const col = PCLASS[currentPlayer()];
+      const col = colorFor(moves.length);
       legalMoves().forEach(mv => {
         // Backward (chaos) moves get a dotted ring and no fill so they look different.
         const cls = mv.back ? 'target back' : (mv.k > 1 ? 'target far' : 'target');
@@ -607,7 +659,7 @@
       });
     }
 
-    const tokenColor = isOver() ? PCLASS[winner()] : PCLASS[currentPlayer()];
+    const tokenColor = isOver() ? colorFor(moves.length - 1) : colorFor(moves.length);
     s += `<circle cx="${X(c.x)}" cy="${Y(c.y)}" r="15" style="fill:${tokenColor};stroke:var(--token-ring)" stroke-width="4"/>`;
 
     s += `</svg>`;
@@ -630,7 +682,31 @@
     box.hidden = counts.length <= 1;
   }
 
+  // The puzzle card: level pills, a status line, and the Reset button.
+  function renderPuzzle() {
+    const L = levelNow();
+    $('levels').hidden = false;
+    renderPills($('levels'), LEVELS.map((lv, i) => [i, `${i + 1}`]), puzzle.level, setLevel);
+    const stage = L.boards.length > 1 ? ` <span class="togo">Board ${puzzle.stage + 1} of ${L.boards.length}: ${n} × ${m}</span>` : '';
+    $('turn').innerHTML = `
+      <div class="turn">${puzzle.level + 1}. ${L.name}</div>
+      <p class="togo">${L.about}</p>
+      <div class="puzzle-status" id="puzzleStatus">${puzzle.msg || 'Coming next.'}${stage}</div>`;
+    const tracing = false;  // level 1 turns this on
+    $('btnN').hidden = $('btnE').hidden = $('btnUndo').hidden = !tracing;
+    $('btnS').hidden = $('btnW').hidden = $('btnNew').hidden = $('btnBoard').hidden = true;
+    $('btnPuzzleReset').hidden = false;
+    $('steps').hidden = true;
+    $('hintBox').hidden = true;
+    $('keys').textContent = `Keyboard: ${keysText()}`;
+    $('keys').hidden = !tracing;
+  }
+
   function renderTurn() {
+    $('levels').hidden = true;
+    $('btnPuzzleReset').hidden = true;
+    $('btnN').hidden = $('btnE').hidden = $('btnUndo').hidden = $('btnNew').hidden = $('keys').hidden = false;
+    if (isPuzzle()) { renderPuzzle(); return; }
     const togo = (n - cur().x) + (m - cur().y);
     if (isDraw()) {
       $('turn').innerHTML = `
@@ -698,7 +774,7 @@
       return;
     }
     $('word').innerHTML = moves.map((mv, i) =>
-      `<span style="color:${PCLASS[playerForMove(i)]}" title="Move ${i + 1}, Player ${playerForMove(i)}">${mv.d.repeat(mv.k)}</span>`
+      `<span style="color:${colorFor(i)}" title="${isPuzzle() ? `Move ${i + 1}` : `Move ${i + 1}, Player ${playerForMove(i)}`}">${mv.d.repeat(mv.k)}</span>`
     ).join('');
   }
 
@@ -715,6 +791,8 @@
   }
 
   function renderScores() {
+    $('logCard').hidden = $('scoreCard').hidden = isPuzzle();
+    if (isPuzzle()) return;
     $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
     const showDraws = isChaosMode();
     $('drawHead').hidden = !showDraws;
@@ -780,7 +858,7 @@
     if (isChaosMode()) rules += ' ' + CHAOS_RULES[chaosRule].text;
     // Say who should win, but only once this board has been played, so the first game
     // stays a surprise. Chaos has no answer, since moves can loop.
-    if (!isChaosMode() && scoreFor(boardKey()).games > 0) {
+    if (!isChaosMode() && !isPuzzle() && scoreFor(boardKey()).games > 0) {
       const p1Loses = makeSolver()(0, 0);
       count += ` With best play, Player ${p1Loses ? 2 : 1} wins on this board.`;
     }
@@ -851,6 +929,7 @@
   $('btnUndo').addEventListener('click', undo);
   $('btnNew').addEventListener('click', newGame);
   $('btnBoard').addEventListener('click', changeBoard);
+  $('btnPuzzleReset').addEventListener('click', resetLevel);
   $('btnHint').addEventListener('click', showHint);
   document.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input, textarea, select')) return;
@@ -860,7 +939,7 @@
     else if (k === 'ArrowDown') { e.preventDefault(); move('S', backSteps()); }
     else if (k === 'ArrowLeft') { e.preventDefault(); move('W', backSteps()); }
     else if (k === 'u' || k === 'U') undo();
-    else if (k === 'r' || k === 'R') newGame();
+    else if ((k === 'r' || k === 'R') && !isPuzzle()) newGame();
     else if (k === 'b' || k === 'B') changeBoard();
     else if ((k === 'h' || k === 'H') && hasSolver() && !isOver()) showHint();
     else if (isLong() && /^[1-9]$/.test(k)) setSteps(Number(k));
