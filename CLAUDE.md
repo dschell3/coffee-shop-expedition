@@ -6,69 +6,71 @@ A playable web version of the Coffee Shop Expedition, a lattice-path game for a 
 
 ```
 /index.html        the live page. Kept as an exact copy of /v2/index.html.
-/v2/index.html     v2, the version we're building now
+/v2/index.html     v2, the file we edit
 /CLAUDE.md         this file
 ```
 
-- Hosted on GitHub Pages: v1 at `https://dschell3.github.io/coffee-shop-expedition/`, v2 at `.../coffee-shop-expedition/v2/`.
+- Hosted on GitHub Pages from `main`: `https://dschell3.github.io/coffee-shop-expedition/` (and the same page at `.../coffee-shop-expedition/v2/`).
 - The printed QR code in our write-up points to the root URL. Edit `/v2/index.html`, then copy it over `/index.html` in the same commit so the two never drift.
 
 ## Hard constraints
 
 - **One self-contained HTML file.** Inline CSS and vanilla JS. No frameworks, no build step, no npm, no external requests. It must work by double-clicking the file with no internet.
 - **Phone first.** Reviewers play it on their phones in class. Test at about 400px wide: no sideways scrolling, tap targets at least 44px, and the board scales to fit.
-- **Light and dark mode.** Keep v1's approach: every color is a CSS custom property on `:root`, redefined under `@media (prefers-color-scheme: dark)`. SVG elements get colors through classes or `style="fill:var(--x)"`, never hard-coded hex.
+- **Light and dark mode.** Every color is a CSS custom property on `:root`, redefined under `@media (prefers-color-scheme: dark)`. SVG elements get colors through classes or `style="fill:var(--x)"`, never hard-coded hex.
 - **Accessible.** Keyboard play (arrow keys), visible focus, `prefers-reduced-motion` respected, an `aria-label` on the board SVG, and an `aria-live` turn status.
 - **Plain language in all UI text.** Short sentences, small words, high school level. No jargon without a one-line explanation. Don't try to sound smart.
 - The goal corner is labeled "Starbucks" to match the class worksheet. Use a generic coffee-cup icon, never a logo.
 
-## How v1 works (what you're building on)
+## How the code works
 
-- State: `n, m` (board width and height), `path` (array of `{x, y}` corners), and `moves` (array of `'N'`/`'E'`).
-- `move(d)`, `undo()`, `newGame()`, `setSize(key)`, then `render()` redraws everything: the SVG board, turn panel, route word, move log, and scoreboard.
+- State: `mode`, `n, m` (board width and height; Starbucks is at corner `(n, m)`), `path` (array of `{x, y}` corners), `moves` (array of `{d, k}`: direction `'N' | 'E' | 'S' | 'W'` and how many blocks), and `setup` (true while Starbucks can still be placed).
+- `legalMoves()` lists every move from the current corner under the current mode. `move(d, k)`, `undo()`, `newGame()`, `setBoard(w, h)`, `setMode(key)`, then `render()` redraws everything: the SVG board, turn panel, route word, move log, and scoreboard.
 - The board is SVG built as a string. Moves are colored by player (P1 green, P2 orange). Glowing dashed circles mark the legal next corners and can be tapped.
-- Board presets: 3×2, 3×3, 5×4.
-- Keys: ↑ North, → East, U undo, R restart.
+- **Board setup.** There are no board presets. Default is 3×3. At page load, and after "Change board", a faint 6×6 map appears and the player taps any corner to put Starbucks there (Width and Height steppers do the same for keyboard users). Setup ends with the first move. "Play again" keeps the board and skips setup. Railroad boards are always square.
+- `countPaths(w, h, ok)` is the corner-rule DP. `makeSolver()` says who wins from any corner in modes without backward moves. Both are reused by hints, the rules box, and the self-check.
+- Keys: ↑ North, → East, ↓ South and ← West on chaos turns, 1–9 block count, H hint, U undo, R play again, B change board.
+- The side cards (Route so far, Move log, Scoreboard, How to play) are collapsible. Route so far starts open. The turn card is always open.
 
-## Modes and rules to build
+## Modes (built)
 
-Let the player pick a **mode** next to the board-size picker. Each mode shows a one or two sentence rule summary under the board. Keep the scoreboard per mode and board size.
+The mode picker is a row of pills above the board. Each mode shows a one or two sentence rule summary under the board, plus the route count for the board. The scoreboard is kept per mode and board size.
 
-### 0. Classic (v1 behavior, keep as is)
+### Classic
 Take turns moving 1 block North or East. Whoever reaches Starbucks wins.
 
-### A. Long moves
+### Long moves
 On your turn, move any number of blocks (at least 1), but all in one direction: all North or all East. Can't go past the edge.
-- UI: tapping any corner straight up or straight right of the token is a legal move. Highlight them all.
-- Math: this is two-pile Nim. With `a` blocks left East and `b` left North, the player to move is losing exactly when `a == b`. The winning move is to make them equal (get back on the diagonal), then copy the opponent.
-- Optional "Hint" button: show the winning move if there is one, or say "No winning move. Try to make them slip up."
+- Tapping any corner straight up or straight right of the token is a legal move. All are highlighted.
+- Math: this is two-pile Nim. With `a` blocks left East and `b` left North, the player to move is losing exactly when `a == b`. The winning move is to make them equal, then copy the opponent.
+- "Hint" button: shows the winning move if there is one, or says "No winning move. Try to make them slip up." Also available in Railroad.
 
-### B. Railroad tracks
-Square boards only (3×3, 4×4, 5×5). A track runs along the diagonal from Start to Starbucks. The token may touch the track but never cross below it. Legal corners have `y >= x`.
-- Draw the track as a dashed line on the diagonal and hide or disable illegal moves.
+### Railroad
+Square boards only. A track runs along the diagonal from Start to Starbucks. The token may touch the track but never cross below it. Legal corners have `y >= x`.
+- The track is a dashed line on the diagonal. Corners below it are dimmed and never offered as moves.
 - Math: the number of legal paths on an n×n board is the Catalan number: 1, 1, 2, 5, 14, 42 for n = 0 to 5.
-- Note: with 1-block moves, every game still takes 2n moves, so Player 2 always wins. Offer **B + long moves** as a toggle, since that combination makes choices matter.
+- With 1-block moves every game takes 2n moves, so Player 2 always wins. A "Long moves" toggle makes choices matter.
 
-### C. Coffee House Chaos
-Classic rules, plus on every 3rd turn of the game (turns 3, 6, 9, and so on) the player may move 1 block South or West instead. Can't leave the board, and can't move back onto Start.
-- UI: on chaos turns, show a clear "Chaos turn! You may step back" banner and highlight the backward options in a different style.
-- Math, and the surprise to surface in the UI after a few games: every move changes x + y by exactly 1, so the total number of moves always has the same odd or even parity as n + m. The winner is still decided before the game starts. Show this in an end-of-game "Why?" note.
-- The game always ends: each 3 turns give at least 2 steps forward and at most 1 back.
-
-### D. Chaos + Long moves (experimental)
-Long-move rules, and on chaos turns the player may move South or West instead. This breaks the parity lock, so choices matter.
-- **Open design question: termination.** If backward moves can be long, the game can loop forever. Prototype these options behind a setting and let us compare:
+### Chaos
+Long-move rules, and on every 3rd turn of the game (turns 3, 6, 9, and so on) the player may step back South or West instead. Can't leave the board, and can't step back onto Start.
+- On chaos turns a "Chaos turn! You may step back" banner shows and the backward corners are drawn dotted.
+- **Open design question: termination.** Backward moves can make the game loop forever. Three options sit behind a dropdown so the group can compare them. Default is option 1 until the group decides. Once decided, keep that one and delete the dropdown.
   1. Backward moves are capped at 1 block (forward moves can still be long).
-  2. Each player gets a limited number of chaos moves per game (default 2), shown as coffee-cup tokens.
-  3. A turn limit (for example 30). If it runs out, nobody wins.
-- Default to option 1 until we decide.
+  2. Each player gets 2 chaos moves per game, shown as coffee-cup tokens.
+  3. A 30-turn limit. If it runs out, nobody wins.
+- The old 1-block-only Chaos mode was built and then removed because it played the same as Classic (the parity argument below). Don't bring it back.
 
-### Puzzle Mode (1 player, nice to have)
-Levels that walk through the math in our write-up:
+### After a board's first game
+The rules box adds "With best play, Player X wins on this board" (from the solver). It only shows once that board has a finished game in that mode, so the first game stays a surprise. Chaos never shows it, since moves can loop.
+
+## Puzzle Mode (to build, narrowly)
+
+A 5th pill in the mode row, "Puzzles". One player. No auto-opening intro screen. Three levels that walk through the math in our write-up, one commit each:
 1. **Find every path** on 2×2, then 3×2. Trace a path. It's recorded as a word (NNEE). Repeats are rejected. Show "4 of 6 found." On completion, show "4 choose 2 = (4 × 3) ÷ (2 × 1) = 6."
 2. **Fill in the corners.** The player types how many paths reach each corner. Check each one with the "below + left" rule.
-3. **Roadwork.** Some streets are closed. Count the paths with the corner rule.
-4. **Railroad.** Count the paths that stay on or above the track: 2, 5, 14.
+3. **Railroad.** Count the paths that stay on or above the track: 2, 5, 14.
+
+The write-up's "Roadwork" level (closed streets) is out of scope. The game block is done: don't add modes or settings beyond this file.
 
 ## Math facts to keep correct
 
@@ -77,16 +79,16 @@ Levels that walk through the math in our write-up:
 - Classic winner: if n + m is odd, Player 1 wins. If even, Player 2 wins.
 - Long moves: positions with equal blocks left East and North are losses for the player to move.
 - Catalan numbers: 1, 1, 2, 5, 14, 42 (n = 0 to 5).
-- Chaos with 1-block moves keeps the same parity, so the same winner.
+- Chaos with 1-block moves keeps the same parity, so the same winner. (Long forward moves break this, which is why Chaos uses them.)
 
-If you add a counter or hint, compute it in code (for example with a DP over corners). Never hard-code the answer. Add a quick self-check in a `<script>` that runs in the console and asserts the values above.
+If you add a counter or hint, compute it in code (for example with a DP over corners). Never hard-code the answer. The self-check `<script>` at the end of the file runs in the console and asserts the values above. Extend it when you add math.
 
 ## Testing before handing back
 
-- Play at least one full game in every mode and board size: win message, undo, restart, keyboard play.
+- Play at least one full game in every mode on a few board sizes, including 1×1 and 6×6: win message, undo, play again, change board, keyboard play.
 - Check at 400px and at desktop width, in both light and dark mode.
-- Check there are no console errors.
-- Confirm the root `/index.html` is unchanged (`git diff --stat` should only show `v2/`).
+- Check there are no console errors, and that the self-check reports all passed.
+- Confirm `/index.html` and `/v2/index.html` are identical (`diff index.html v2/index.html`).
 
 ## Git workflow
 
@@ -97,21 +99,10 @@ If you add a counter or hint, compute it in code (for example with a DP over cor
   git config user.email "<Darren's GitHub noreply email, from GitHub Settings > Emails>"
   ```
   Ask Darren for the email if it isn't already set. Don't guess it.
-- **No AI attribution:** don't add `Co-Authored-By`, "Generated with", or similar lines to commit messages or PRs.
-- **Small commits:** one step per commit, each leaving the game playable. A suggested order:
-  1. Copy v1 to `v2/index.html` (no changes)
-  2. Add the mode picker and rule summary (Classic only)
-  3. Mode A: long moves
-  4. Nim hint button
-  5. Mode B: railroad tracks
-  6. B + long moves toggle
-  7. Mode C: Coffee House Chaos
-  8. Chaos "Why?" end-of-game note
-  9. Mode D: Chaos + long moves, with the termination setting
-  10. Math self-check script
-  11. Puzzle Mode levels, one commit per level
+- **No signing, no AI attribution:** run `git config commit.gpgsign false` for this repo so commits aren't signed with a key GitHub can't verify. Don't add `Co-Authored-By`, "Generated with", or similar lines to commit messages or PRs.
+- **Small commits:** one step per commit, each leaving the game playable. Each commit that changes `/v2/index.html` also copies it over `/index.html`.
 - **Commit messages:** short, plain, and present tense, for example "Add long moves mode" or "Fix railroad check on 4x4 board".
 
 ## Working style
 
-- Darren prefers short, plain explanations. Ask before big design changes, and say what you changed in a few sentences.
+- Darren prefers short, plain explanations. Ask before big design changes, and say what you changed in a few sentences. For anything bigger than a fix, lay out a commit plan first and wait for a go.
