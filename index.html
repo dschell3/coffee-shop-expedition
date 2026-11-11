@@ -43,6 +43,7 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     font-family: var(--font);
@@ -84,14 +85,41 @@
   .sizes span { color: var(--muted); font-size: 0.9rem; margin-right: 4px; }
   .size-btn {
     border: 1px solid var(--line); background: var(--btn-bg); color: var(--ink);
-    padding: 6px 14px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
+    padding: 6px 14px; min-height: 44px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
   }
   .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+  .steps { margin: 12px 0 0; }
+  .opt { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 0.9rem; }
+  select {
+    font: inherit; font-weight: 600; color: var(--ink); background: var(--btn-bg);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; min-height: 44px; max-width: 100%;
+  }
+  select:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
+  .target.far { animation: none; opacity: .75; }
+  .target.back { animation: none; }
+  .chaos {
+    margin-top: 8px; padding: 8px 12px; border-radius: 10px; font-weight: 600;
+    background: var(--block); border: 2px dashed var(--cup); color: var(--ink);
+  }
+  .chaos small { display: block; font-weight: 400; color: var(--muted); }
+  .rules { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--block); font-size: 0.95rem; }
+  .rules p { margin: 0; }
+  .rules p + p { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
 
   #board svg { width: 100%; height: auto; display: block; max-height: 70vh; }
   .blk { fill: var(--block); }
+  .blk.off { fill: var(--line); opacity: .45; }
   .street { stroke: var(--street); }
   .dot { fill: var(--dot); }
+  .dot.off { fill: var(--card); stroke: var(--dot); stroke-width: 2; }
+  .track { stroke: var(--cup); opacity: .8; }
+  .street.map { opacity: .45; }
+  .place { cursor: pointer; }
+  .place circle { fill: var(--card); stroke: var(--dot); }
+  .place:hover circle { fill: var(--block); stroke: var(--cup); r: 12; }
+  .stepper { gap: 6px; }
+  .stepper strong { min-width: 1.4em; text-align: center; color: var(--ink); font-size: 1.05rem; }
+  .stepper .size-btn { min-width: 44px; padding-inline: 10px; }
   .axis { fill: var(--axis); }
   .lbl { fill: var(--ink); }
   .cup-fill { fill: var(--cup); }
@@ -118,9 +146,14 @@
     border: 1px solid var(--line); background: var(--btn-bg); color: var(--ink);
   }
   .btn.move { font-size: 1.05rem; background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+  .btn.wide { grid-column: 1 / -1; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn:focus-visible, .size-btn:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
   .keys { color: var(--muted); font-size: 0.82rem; margin: 8px 0 0; }
+  .hintbox { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; margin-top: 12px; }
+  .hintbox .btn { padding-inline: 16px; }
+  .hintout { margin: 0; font-size: 0.93rem; min-height: 1.3em; }
+  .hintout:empty::before { content: 'Stuck? Ask for a hint.'; color: var(--muted); }
 
   .word { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; letter-spacing: 0.12em; min-height: 1.8rem; word-break: break-all; }
   .word .empty { color: var(--muted); font-weight: 400; font-size: 0.95rem; letter-spacing: 0; font-family: var(--font); }
@@ -134,8 +167,20 @@
   th:first-child, td:first-child { text-align: left; }
   tr.current td { font-weight: 700; }
 
-  details summary { cursor: pointer; font-weight: 600; }
-  details ol { padding-left: 20px; margin: 8px 0 0; font-size: 0.93rem; }
+  /* Collapsible side cards. The heading is the tap target. */
+  .fold { padding: 0; }
+  .fold > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; min-height: 48px; padding: 0 16px; border-radius: 14px;
+  }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary h2 { margin: 0; }
+  .fold > summary::after { content: '▸'; color: var(--muted); font-size: 1.1rem; transition: transform .2s; }
+  .fold[open] > summary::after { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .fold > summary::after { transition: none; } }
+  .fold > summary:focus-visible { outline: 3px solid var(--p1); outline-offset: -3px; }
+  .fold > .body { padding: 0 16px 16px; }
+  .fold ol:not(#log) { padding-left: 20px; margin: 0; font-size: 0.93rem; }
   footer { text-align: center; color: var(--muted); font-size: 0.82rem; padding-top: 16px; }
 </style>
 </head>
@@ -144,63 +189,79 @@
 <div class="wrap">
   <header>
     <h1>The Coffee Shop Expedition</h1>
-    <p class="sub">Take turns walking one block North or East. Whoever steps into the coffee shop wins.</p>
+    <p class="sub">A two-player walk across the city grid. Pick a mode, then race to the coffee shop.</p>
   </header>
 
   <main>
     <section class="card" aria-label="Game board">
-      <div class="sizes" role="group" aria-label="Board size">
-        <span>Board:</span>
-        <button class="size-btn" id="size-3x2" data-size="3x2">3 × 2</button>
-        <button class="size-btn" id="size-3x3" data-size="3x3">3 × 3</button>
-        <button class="size-btn" id="size-5x4" data-size="5x4">5 × 4</button>
+      <div class="sizes" role="group" aria-label="Game mode" id="modes">
+        <span>Mode:</span>
       </div>
+      <div class="sizes" role="group" aria-label="Board size and mode settings" id="options" hidden></div>
       <div id="board"></div>
-      <p class="hint">Tap a glowing corner, use the buttons, or press ↑ / →.</p>
+      <div class="rules" id="rules"></div>
+      <p class="hint" id="boardHint">Tap a glowing corner, use the buttons, or press ↑ / →.</p>
     </section>
 
     <aside>
       <section class="card" aria-live="polite">
         <div id="turn"></div>
+        <div class="sizes steps" role="group" aria-label="How many blocks to move" id="steps" hidden>
+          <span>Blocks:</span>
+        </div>
         <div class="controls">
           <button class="btn move" id="btnN">↑ North</button>
           <button class="btn move" id="btnE">→ East</button>
+          <button class="btn" id="btnS" hidden>↓ South</button>
+          <button class="btn" id="btnW" hidden>← West</button>
           <button class="btn" id="btnUndo">Undo</button>
-          <button class="btn" id="btnNew">New game</button>
+          <button class="btn" id="btnNew">Play again</button>
+          <button class="btn wide" id="btnBoard">Change board</button>
         </div>
-        <p class="keys">Keyboard: ↑ North · → East · U undo · R restart</p>
+        <p class="keys" id="keys"></p>
+        <div class="hintbox" id="hintBox" hidden>
+          <button class="btn" id="btnHint">Hint</button>
+          <p class="hintout" id="hintOut"></p>
+        </div>
       </section>
 
-      <section class="card">
-        <h2>Route so far</h2>
-        <div class="word" id="word"></div>
-      </section>
+      <details class="card fold" open>
+        <summary><h2>Route so far</h2></summary>
+        <div class="body">
+          <div class="word" id="word"></div>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2>Move log</h2>
-        <ol id="log"></ol>
-        <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
-      </section>
+      <details class="card fold">
+        <summary><h2>Move log</h2></summary>
+        <div class="body">
+          <ol id="log"></ol>
+          <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2>Scoreboard</h2>
-        <table>
-          <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th></tr></thead>
-          <tbody id="scores"></tbody>
-        </table>
-      </section>
+      <details class="card fold">
+        <summary><h2 id="scoreTitle">Scoreboard</h2></summary>
+        <div class="body">
+          <table>
+            <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th><th id="drawHead" hidden>Nobody</th></tr></thead>
+            <tbody id="scores"></tbody>
+          </table>
+        </div>
+      </details>
 
-      <section class="card">
-        <details>
-          <summary>How to play</summary>
+      <details class="card fold">
+        <summary><h2>How to play</h2></summary>
+        <div class="body">
           <ol>
             <li>The token starts at the bottom-left corner. The coffee shop is at the top-right corner.</li>
+            <li>Before the first move, tap any corner of the map to choose where the coffee shop goes. Boards go up to 6 by 6.</li>
             <li>Players take turns. Player 1 goes first.</li>
             <li>On your turn, move one block North (↑) or East (→). No diagonals and no going back.</li>
             <li>Whoever moves the token into the coffee shop wins.</li>
           </ol>
-        </details>
-      </section>
+        </div>
+      </details>
     </aside>
   </main>
 
@@ -210,37 +271,200 @@
 <script>
 (function () {
   const PCLASS = { 1: 'var(--p1)', 2: 'var(--p2)' };
-  const SIZES = { '3x2': [3, 2], '3x3': [3, 3], '5x4': [5, 4] };
+  const DIRNAME = { N: 'North', E: 'East', S: 'South', W: 'West' };
+  const MODES = {
+    classic: {
+      name: 'Classic',
+      rules: 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.',
+      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →.'
+    },
+    long: {
+      name: 'Long moves',
+      long: true,
+      solver: true,
+      rules: 'On your turn, move as many blocks as you like, but all North or all East. At least 1 block. Whoever reaches Starbucks wins.',
+      hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.'
+    },
+    rail: {
+      name: 'Railroad',
+      rail: true,
+      solver: true,
+      rules: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move 1 block North or East.',
+      rulesLong: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move as many blocks as you like, but all North or all East.',
+      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →. Corners below the track are off limits.'
+    },
+    chaos: {
+      name: 'Chaos',
+      chaos: true,
+      long: true,
+      rules: 'Long moves: go as far as you like, all North or all East. On every 3rd turn (3, 6, 9, and so on), you may step back South or West instead. Never back onto Start.',
+      hint: 'Tap any glowing corner. Dotted corners step back on a chaos turn. This mode is an experiment, so try each setting.'
+    }
+  };
+  const isChaosMode = () => !!MODES[mode].chaos;
 
-  let sizeKey = '3x2';
-  let n = 3, m = 2;
+  // Chaos moves could loop forever. These settings stop that. Try each one.
+  const CHAOS_RULES = {
+    cap: { label: 'Back moves are 1 block', text: 'Back moves are only 1 block. Forward moves can still be long.' },
+    tokens: { label: '2 chaos moves each', text: 'Each player gets only 2 chaos moves per game, shown as cups. Back moves can be long.' },
+    limit: { label: '30-turn limit', text: 'Back moves can be long. If the game reaches 30 turns with no winner, nobody wins.' }
+  };
+  const CHAOS_TOKENS = 2;
+  const TURN_LIMIT = 30;
+  let chaosRule = 'cap';
+  const chaosRuleNow = () => chaosRule;
+  let railLong = false;  // Railroad mode with long moves turned on
+  const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
+  const isRail = () => !!MODES[mode].rail;
+  const hasSolver = () => !!MODES[mode].solver;
+  const keysText = () => '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
+    (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R play again · B change board';
+  // Can the token stand on corner (x, y) in this mode?
+  const cornerOk = (x, y) => !isRail() || y >= x;
+
+  let mode = 'classic';
+  let n = 3, m = 3;      // board width and height: Starbucks is at corner (n, m)
+  const MAXB = 6;        // biggest board, so it still fits on a phone
+  // Setup is when Starbucks can still be placed: at the start, and after "Change board".
+  // It ends with the first move. "Play again" keeps the board and skips setup.
+  let setup = true;
+  const inSetup = () => setup && moves.length === 0;
+  const boardKey = () => `${n}x${m}`;
   let path = [{ x: 0, y: 0 }];
-  let moves = [];
+  let moves = [];      // each move is { d: 'N' | 'E', k: blocks }
+  let steps = 1;       // how many blocks the buttons and arrow keys move (long-move modes)
+  let hintText = '';   // last hint shown; cleared whenever the position changes
+  // Scoreboard is kept for every mode (and mode option) and board size.
   const scores = {};
-  Object.keys(SIZES).forEach(k => { scores[k] = { games: 0, p1: 0, p2: 0 }; });
+  const scoreMode = () => mode + (isRail() && railLong ? '+long' : '');
+  const scoreName = () => MODES[mode].name + (isRail() && railLong ? ' + long moves' : '');
+  function scoreFor(key) {
+    const mk = scoreMode();
+    scores[mk] = scores[mk] || {};
+    scores[mk][key] = scores[mk][key] || { games: 0, p1: 0, p2: 0, draws: 0 };
+    return scores[mk][key];
+  }
 
   const $ = id => document.getElementById(id);
   const cur = () => path[path.length - 1];
-  const isOver = () => cur().x === n && cur().y === m;
+  const atGoal = () => cur().x === n && cur().y === m;
+  // With the turn limit setting, the game can also end with nobody winning.
+  const isDraw = () => !atGoal() && chaosRuleNow() === 'limit' && moves.length >= TURN_LIMIT;
+  const isOver = () => atGoal() || isDraw();
   const playerForMove = i => (i % 2 === 0 ? 1 : 2);
   const currentPlayer = () => playerForMove(moves.length);
   const winner = () => playerForMove(moves.length - 1);
+  const turnNumber = () => moves.length + 1;
+  // Chaos turns are every 3rd turn of the game: 3, 6, 9, ...
+  const isChaosTurn = () => isChaosMode() && !isOver() && turnNumber() % 3 === 0;
 
-  function canMove(d) {
-    if (isOver()) return false;
-    const c = cur();
-    return d === 'E' ? c.x < n : c.y < m;
+  // How many chaos (backward) moves a player has made this game.
+  const chaosUsed = p => moves.filter((mv, i) => playerForMove(i) === p && (mv.d === 'S' || mv.d === 'W')).length;
+  const chaosLeft = p => CHAOS_TOKENS - chaosUsed(p);
+
+  // Backward moves allowed on a chaos turn: South or West. Never off the board,
+  // and never back onto Start. Back moves are 1 block unless a Chaos
+  // setting says they can be long.
+  function backMovesFrom(x, y) {
+    const rule = chaosRuleNow();
+    if (rule === 'tokens' && chaosLeft(currentPlayer()) <= 0) return [];
+    const long = rule !== 'cap';
+    const maxW = long ? x : Math.min(1, x);
+    const maxS = long ? y : Math.min(1, y);
+    const out = [];
+    for (let k = 1; k <= maxW; k++) out.push({ d: 'W', k, x: x - k, y, back: true });
+    for (let k = 1; k <= maxS; k++) out.push({ d: 'S', k, x, y: y - k, back: true });
+    return out.filter(mv => !(mv.x === 0 && mv.y === 0));
   }
 
-  function move(d) {
-    if (!canMove(d)) return;
+  // Forward moves from corner (x, y) under the current mode. Each is { d, k, x, y }:
+  // direction, number of blocks, and the corner you land on.
+  function forwardMovesFrom(x, y) {
+    const out = [];
+    const maxE = isLong() ? n - x : Math.min(1, n - x);
+    const maxN = isLong() ? m - y : Math.min(1, m - y);
+    for (let k = 1; k <= maxE; k++) out.push({ d: 'E', k, x: x + k, y });
+    for (let k = 1; k <= maxN; k++) out.push({ d: 'N', k, x, y: y + k });
+    // A straight move only crosses corners between start and finish, so checking
+    // the finish corner is enough.
+    return out.filter(mv => cornerOk(mv.x, mv.y));
+  }
+
+  // Count routes from Start to (w, h) with the corner rule:
+  // paths(x, y) = paths(x - 1, y) + paths(x, y - 1). `ok(x, y)` says if a corner may be used.
+  function countPaths(w, h, ok) {
+    const p = [];
+    for (let x = 0; x <= w; x++) {
+      p[x] = [];
+      for (let y = 0; y <= h; y++) {
+        if (!ok(x, y)) { p[x][y] = 0; continue; }
+        if (x === 0 && y === 0) { p[x][y] = 1; continue; }
+        p[x][y] = (x > 0 ? p[x - 1][y] : 0) + (y > 0 ? p[x][y - 1] : 0);
+      }
+    }
+    return p[w][h];
+  }
+
+  function legalMoves() {
+    if (isOver()) return [];
     const c = cur();
-    path.push(d === 'E' ? { x: c.x + 1, y: c.y } : { x: c.x, y: c.y + 1 });
-    moves.push(d);
+    const out = forwardMovesFrom(c.x, c.y);
+    return isChaosTurn() ? out.concat(backMovesFrom(c.x, c.y)) : out;
+  }
+
+  // Solver for modes where the token only moves forward (no loops possible).
+  // A corner is "losing" if the player who must move from it loses when both sides play well.
+  // Starbucks itself is losing for the player to move: the other player just took the coffee.
+  function makeSolver() {
+    const memo = new Map();
+    const losing = (x, y) => {
+      if (x === n && y === m) return true;
+      const key = x + ',' + y;
+      if (memo.has(key)) return memo.get(key);
+      const r = forwardMovesFrom(x, y).every(mv => !losing(mv.x, mv.y));
+      memo.set(key, r);
+      return r;
+    };
+    return losing;
+  }
+
+  function winningMoves() {
+    const losing = makeSolver();
+    return legalMoves().filter(mv => losing(mv.x, mv.y));
+  }
+
+  function showHint() {
+    const wins = winningMoves();
+    if (!wins.length) {
+      hintText = 'No winning move. Try to make them slip up.';
+    } else {
+      const mv = wins[0];
+      hintText = `Move ${DIRNAME[mv.d]} ${mv.k} block${mv.k > 1 ? 's' : ''}.`;
+      if (mode === 'long') {
+        const a = n - mv.x, b = m - mv.y;
+        hintText += ` That leaves ${a} blocks East and ${b} blocks North, the same both ways. Then copy whatever they do.`;
+      }
+    }
+    render();
+  }
+
+  const findMove = (d, k) => legalMoves().find(mv => mv.d === d && mv.k === k);
+  const canMove = (d, k = 1) => !!findMove(d, k);
+
+  function move(d, k = 1) {
+    const mv = findMove(d, k);
+    if (!mv) return;
+    path.push({ x: mv.x, y: mv.y });
+    moves.push({ d: mv.d, k: mv.k });
+    steps = 1;
+    hintText = '';
+    setup = false;
     if (isOver()) {
-      const s = scores[sizeKey];
+      const s = scoreFor(boardKey());
       s.games++;
-      if (winner() === 1) s.p1++; else s.p2++;
+      if (isDraw()) s.draws++;
+      else if (winner() === 1) s.p1++;
+      else s.p2++;
     }
     render();
   }
@@ -249,18 +473,51 @@
     if (!moves.length || isOver()) return;
     path.pop();
     moves.pop();
+    steps = 1;
+    hintText = '';
     render();
   }
 
   function newGame() {
     path = [{ x: 0, y: 0 }];
     moves = [];
+    steps = 1;
+    hintText = '';
     render();
   }
 
-  function setSize(key) {
-    sizeKey = key;
-    [n, m] = SIZES[key];
+  function setSteps(k) {
+    steps = k;
+    render();
+  }
+
+  // Put Starbucks at corner (w, h). Railroad boards are always square.
+  function setBoard(w, h) {
+    const clamp = v => Math.max(1, Math.min(MAXB, v));
+    n = clamp(w);
+    m = isRail() ? n : clamp(h);
+    newGame();
+  }
+
+  function changeBoard() {
+    setup = true;
+    newGame();
+  }
+
+  function setRailLong(on) {
+    railLong = on;
+    newGame();
+  }
+
+  function setChaosRule(key) {
+    chaosRule = key;
+    newGame();
+  }
+
+  function setMode(key) {
+    mode = key;
+    // Railroad needs a square board, so square it up if needed.
+    if (isRail() && n !== m) m = n;
     newGame();
   }
 
@@ -277,22 +534,35 @@
 
   function renderBoard() {
     const cell = 90, padL = 64, padR = 72, padT = 88, padB = 76;
-    const W = n * cell + padL + padR, H = m * cell + padT + padB;
+    // During setup the drawing shows a bigger map, so Starbucks can be placed on any corner of it.
+    const setup = inSetup();
+    const mw = setup ? MAXB : n, mh = setup ? MAXB : m;
+    const W = mw * cell + padL + padR, H = mh * cell + padT + padB;
     const X = x => padL + x * cell;
-    const Y = y => padT + (m - y) * cell;
+    const Y = y => padT + (mh - y) * cell;
     const c = cur();
-    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).">`;
+    const railNote = isRail() ? ' A train track runs along the diagonal; corners below it are off limits.' : '';
+    const setupNote = setup ? ' Setup: tap any corner of the map to put the coffee shop there.' : '';
+    let s = `<svg viewBox="0 0 ${W} ${H}" style="max-width:${Math.round(W * 1.2)}px;margin:0 auto" role="img" aria-label="${MODES[mode].name} mode, ${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).${railNote}${setupNote}">`;
+
+    if (setup) {
+      // Faint map streets and corners beyond the current board.
+      for (let x = 0; x <= mw; x++) s += `<line class="street map" x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(mh)}" stroke-width="2" stroke-dasharray="4 6"/>`;
+      for (let y = 0; y <= mh; y++) s += `<line class="street map" x1="${X(0)}" y1="${Y(y)}" x2="${X(mw)}" y2="${Y(y)}" stroke-width="2" stroke-dasharray="4 6"/>`;
+    }
 
     for (let x = 0; x < n; x++) for (let y = 0; y < m; y++) {
-      s += `<rect class="blk" x="${X(x) + 9}" y="${Y(y + 1) + 9}" width="${cell - 18}" height="${cell - 18}" rx="9"/>`;
+      // In railroad mode, blocks fully below the track are dimmed.
+      const off = isRail() && y < x ? ' off' : '';
+      s += `<rect class="blk${off}" x="${X(x) + 9}" y="${Y(y + 1) + 9}" width="${cell - 18}" height="${cell - 18}" rx="9"/>`;
     }
     for (let x = 0; x <= n; x++) s += `<line class="street" x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(m)}" stroke-width="3" stroke-linecap="round"/>`;
     for (let y = 0; y <= m; y++) s += `<line class="street" x1="${X(0)}" y1="${Y(y)}" x2="${X(n)}" y2="${Y(y)}" stroke-width="3" stroke-linecap="round"/>`;
 
-    for (let x = 0; x <= n; x++) s += `<text class="axis" x="${X(x)}" y="${Y(0) + 34}" text-anchor="middle" font-size="13">${x}</text>`;
-    for (let y = 1; y <= m; y++) s += `<text class="axis" x="${X(0) - 26}" y="${Y(y) + 4}" text-anchor="end" font-size="13">${y}</text>`;
+    for (let x = 0; x <= mw; x++) s += `<text class="axis" x="${X(x)}" y="${Y(0) + 34}" text-anchor="middle" font-size="13">${x}</text>`;
+    for (let y = 1; y <= mh; y++) s += `<text class="axis" x="${X(0) - 26}" y="${Y(y) + 4}" text-anchor="end" font-size="13">${y}</text>`;
     s += `<text class="lbl" x="${X(0)}" y="${Y(0) + 56}" text-anchor="middle" font-size="14" font-weight="700">Start</text>`;
-    s += `<text class="axis" x="${(X(0) + X(n)) / 2}" y="${Y(0) + 56}" text-anchor="middle" font-size="12">East →</text>`;
+    s += `<text class="axis" x="${(X(0) + X(mw)) / 2}" y="${Y(0) + 56}" text-anchor="middle" font-size="12">East →</text>`;
 
     for (let i = 0; i < moves.length; i++) {
       const a = path[i], b = path[i + 1];
@@ -300,7 +570,24 @@
     }
 
     for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) {
-      s += `<circle class="dot" cx="${X(x)}" cy="${Y(y)}" r="3.5"/>`;
+      const off = cornerOk(x, y) ? '' : ' off';
+      s += `<circle class="dot${off}" cx="${X(x)}" cy="${Y(y)}" r="${off ? 5 : 3.5}"/>`;
+    }
+    if (isRail()) {
+      s += `<line class="track" x1="${X(0)}" y1="${Y(0)}" x2="${X(n)}" y2="${Y(m)}" stroke-width="5" stroke-dasharray="10 8" stroke-linecap="round"><title>Train track</title></line>`;
+    }
+
+    if (setup) {
+      // Every corner of the map is a place Starbucks could go. The whole cell around
+      // a corner is the tap area, so the targets stay easy to hit on a phone.
+      for (let x = 1; x <= mw; x++) for (let y = 1; y <= mh; y++) {
+        if ((x === n && y === m) || (isRail() && x !== y)) continue;
+        s += `<g class="place" data-x="${x}" data-y="${y}" role="button" tabindex="-1">
+          <title>Put Starbucks at (${x}, ${y})</title>
+          <rect x="${X(x) - cell / 2}" y="${Y(y) - cell / 2}" width="${cell}" height="${cell}" fill="transparent"/>
+          <circle cx="${X(x)}" cy="${Y(y)}" r="9" stroke-width="2.5"/>
+        </g>`;
+      }
     }
 
     s += cupIcon(X(n), Y(m));
@@ -309,9 +596,14 @@
 
     if (!isOver()) {
       const col = PCLASS[currentPlayer()];
-      [['E', c.x + 1, c.y], ['N', c.x, c.y + 1]].forEach(([d, tx, ty]) => {
-        if (!canMove(d)) return;
-        s += `<circle class="target" data-move="${d}" cx="${X(tx)}" cy="${Y(ty)}" r="13" style="fill:${col};stroke:${col}" fill-opacity=".18" stroke-width="2.5" stroke-dasharray="5 4"><title>Move ${d === 'E' ? 'East' : 'North'}</title></circle>`;
+      legalMoves().forEach(mv => {
+        // Backward (chaos) moves get a dotted ring and no fill so they look different.
+        const cls = mv.back ? 'target back' : (mv.k > 1 ? 'target far' : 'target');
+        const r = mv.k > 1 ? 11 : 13;
+        const dash = mv.back ? '2 5' : '5 4';
+        const fillOp = mv.back ? '0' : '.18';
+        const title = `${mv.back ? 'Step back' : 'Move'} ${DIRNAME[mv.d]}${mv.k > 1 ? ` ${mv.k} blocks` : ''}`;
+        s += `<circle class="${cls}" data-move="${mv.d}" data-k="${mv.k}" cx="${X(mv.x)}" cy="${Y(mv.y)}" r="${r}" style="fill:${col};stroke:${col}" fill-opacity="${fillOp}" stroke-width="3" stroke-dasharray="${dash}"><title>${title}</title></circle>`;
       });
     }
 
@@ -321,13 +613,33 @@
     s += `</svg>`;
     $('board').innerHTML = s;
     $('board').querySelectorAll('.target').forEach(el => {
-      el.addEventListener('click', () => move(el.dataset.move));
+      el.addEventListener('click', () => move(el.dataset.move, Number(el.dataset.k)));
     });
+    $('board').querySelectorAll('.place').forEach(el => {
+      el.addEventListener('click', () => setBoard(Number(el.dataset.x), Number(el.dataset.y)));
+    });
+  }
+
+  // Block-count picker, only shown in long-move modes.
+  function renderSteps() {
+    const box = $('steps');
+    if (!isLong() || isOver()) { box.hidden = true; return; }
+    const counts = [...new Set(legalMoves().map(mv => mv.k))].sort((a, b) => a - b);
+    if (!counts.includes(steps)) steps = counts[0] || 1;
+    renderPills(box, counts.map(k => [k, String(k)]), steps, setSteps);
+    box.hidden = counts.length <= 1;
   }
 
   function renderTurn() {
     const togo = (n - cur().x) + (m - cur().y);
-    if (isOver()) {
+    if (isDraw()) {
+      $('turn').innerHTML = `
+        <div class="turn"><span class="chip" style="background:var(--muted)"></span>Nobody wins</div>
+        <div class="win" style="color:var(--muted)">
+          ${TURN_LIMIT} turns went by and nobody reached the coffee.
+          <p>Try again, or pick a different setting for this mode.</p>
+        </div>`;
+    } else if (isOver()) {
       const w = winner();
       $('turn').innerHTML = `
         <div class="turn"><span class="chip" style="background:${PCLASS[w]}"></span>Player ${w} wins!</div>
@@ -337,30 +649,65 @@
         </div>`;
     } else {
       const p = currentPlayer();
+      let extra = '';
+      if (isChaosMode()) {
+        const t = turnNumber();
+        const until = 3 - (t % 3);
+        const rule = chaosRuleNow();
+        const howFar = rule === 'cap' ? '1 block' : 'any number of blocks';
+        const turnLabel = rule === 'limit' ? `Turn ${t} of ${TURN_LIMIT}.` : `Turn ${t}.`;
+        if (isChaosTurn()) {
+          const none = rule === 'tokens' && chaosLeft(p) <= 0;
+          extra = none
+            ? `<div class="chaos">Chaos turn, but you are out of chaos moves.<small>Move forward as usual.</small></div>`
+            : `<div class="chaos">Chaos turn! You may step back ${howFar} South or West.<small>Or move forward as usual.</small></div>`;
+        } else {
+          extra = `<p class="togo">${turnLabel} Next chaos turn in ${until} turn${until > 1 ? 's' : ''}.</p>`;
+        }
+        if (rule === 'tokens') {
+          const cups = q => (q > 0 ? '☕'.repeat(q) : 'none');
+          extra += `<p class="togo">Chaos moves left · Player 1: ${cups(chaosLeft(1))} · Player 2: ${cups(chaosLeft(2))}</p>`;
+        }
+      }
       $('turn').innerHTML = `
         <div class="turn"><span class="chip" style="background:${PCLASS[p]}"></span>Player ${p}'s turn</div>
-        <p class="togo">Blocks to go: ${togo}</p>`;
+        <p class="togo">Blocks to go: ${togo}</p>${extra}`;
     }
-    $('btnN').disabled = !canMove('N');
-    $('btnE').disabled = !canMove('E');
+    const times = steps > 1 ? ` ×${steps}` : '';
+    $('btnN').textContent = `↑ North${times}`;
+    $('btnE').textContent = `→ East${times}`;
+    $('btnN').disabled = !canMove('N', steps);
+    $('btnE').disabled = !canMove('E', steps);
+    $('btnS').hidden = $('btnW').hidden = !isChaosMode();
+    const backSteps = chaosRuleNow() === 'cap' ? 1 : steps;
+    const backTimes = backSteps > 1 ? ` ×${backSteps}` : '';
+    $('btnS').textContent = `↓ South${backTimes}`;
+    $('btnW').textContent = `← West${backTimes}`;
+    $('btnS').disabled = !canMove('S', backSteps);
+    $('btnW').disabled = !canMove('W', backSteps);
     $('btnUndo').disabled = !moves.length || isOver();
-    $('btnNew').textContent = isOver() ? 'Play again' : 'New game';
+    $('btnBoard').hidden = inSetup();
+    $('keys').textContent = `Keyboard: ${keysText()}`;
+    $('hintBox').hidden = !hasSolver() || isOver();
+    $('hintOut').textContent = hintText;
   }
 
   function renderWord() {
     if (!moves.length) {
-      $('word').innerHTML = `<span class="empty">Each move adds a letter: N or E.</span>`;
+      $('word').innerHTML = `<span class="empty">Each block walked adds a letter: ${isChaosMode() ? 'N, E, S or W' : 'N or E'}.</span>`;
       return;
     }
-    $('word').innerHTML = moves.map((d, i) =>
-      `<span style="color:${PCLASS[playerForMove(i)]}" title="Move ${i + 1}, Player ${playerForMove(i)}">${d}</span>`
+    $('word').innerHTML = moves.map((mv, i) =>
+      `<span style="color:${PCLASS[playerForMove(i)]}" title="Move ${i + 1}, Player ${playerForMove(i)}">${mv.d.repeat(mv.k)}</span>`
     ).join('');
   }
 
   function renderLog() {
-    $('log').innerHTML = moves.map((d, i) => {
+    $('log').innerHTML = moves.map((mv, i) => {
       const p = path[i + 1];
-      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${d === 'E' ? 'East' : 'North'} → (${p.x}, ${p.y})</li>`;
+      const times = mv.k > 1 ? ` ×${mv.k}` : '';
+      const back = mv.d === 'S' || mv.d === 'W' ? ' (chaos)' : '';
+      return `<li><strong style="color:${PCLASS[playerForMove(i)]}">Player ${playerForMove(i)}</strong> ${DIRNAME[mv.d]}${times}${back} → (${p.x}, ${p.y})</li>`;
     }).join('');
     $('logEmpty').hidden = moves.length > 0;
     const log = $('log');
@@ -368,43 +715,247 @@
   }
 
   function renderScores() {
-    $('scores').innerHTML = Object.keys(SIZES).map(k => {
-      const s = scores[k];
-      const [a, b] = SIZES[k];
-      return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td></tr>`;
+    $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
+    const showDraws = isChaosMode();
+    $('drawHead').hidden = !showDraws;
+    // One row for the current board, plus every board size played in this mode.
+    const size = k => k.split('x').reduce((t, v) => t * 10 + Number(v), 0);
+    const keys = Object.keys(scores[scoreMode()] || {}).filter(k => scores[scoreMode()][k].games > 0);
+    if (!keys.includes(boardKey())) keys.push(boardKey());
+    keys.sort((a, b) => size(a) - size(b));
+    $('scores').innerHTML = keys.map(k => {
+      const s = scoreFor(k);
+      const [a, b] = k.split('x');
+      const draws = showDraws ? `<td>${s.draws}</td>` : '';
+      return `<tr class="${k === boardKey() ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td>${draws}</tr>`;
     }).join('');
   }
 
-  function renderSizes() {
-    document.querySelectorAll('.size-btn').forEach(b => {
-      b.setAttribute('aria-pressed', b.dataset.size === sizeKey ? 'true' : 'false');
+  // Pill buttons for a picker row. `items` is [[key, label], ...].
+  function renderPills(container, items, selected, onPick) {
+    container.querySelectorAll('button').forEach(b => b.remove());
+    items.forEach(([key, label]) => {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.textContent = label;
+      b.setAttribute('aria-pressed', key === selected ? 'true' : 'false');
+      b.addEventListener('click', () => onPick(key));
+      container.appendChild(b);
     });
   }
 
+  function renderModes() {
+    renderPills($('modes'), Object.keys(MODES).map(k => [k, MODES[k].name]), mode, setMode);
+  }
+
+  // A minus / number / plus control for the board size.
+  function stepper(label, value, onChange) {
+    const box = document.createElement('div');
+    box.className = 'opt stepper';
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', `Board ${label.toLowerCase()}`);
+    const mk = (text, aria, delta) => {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.textContent = text;
+      b.setAttribute('aria-label', aria);
+      b.disabled = value + delta < 1 || value + delta > MAXB;
+      b.addEventListener('click', () => onChange(value + delta));
+      return b;
+    };
+    const num = document.createElement('strong');
+    num.textContent = value;
+    box.append(`${label}:`, mk('−', `${label} down`, -1), num, mk('+', `${label} up`, 1));
+    return box;
+  }
+
+  function renderRules() {
+    const all = countPaths(n, m, () => true);
+    let count = `There are ${all} different routes from Start to Starbucks on this board.`;
+    if (isRail()) {
+      const ok = countPaths(n, m, cornerOk);
+      count = `This board has ${all} routes in all. Only ${ok} of them ${ok === 1 ? 'stays' : 'stay'} on or above the track.`;
+    }
+    let rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
+    if (isChaosMode()) rules += ' ' + CHAOS_RULES[chaosRule].text;
+    // Say who should win, but only once this board has been played, so the first game
+    // stays a surprise. Chaos has no answer, since moves can loop.
+    if (!isChaosMode() && scoreFor(boardKey()).games > 0) {
+      const p1Loses = makeSolver()(0, 0);
+      count += ` With best play, Player ${p1Loses ? 2 : 1} wins on this board.`;
+    }
+    $('rules').innerHTML = `<p>${rules}</p><p>${count}</p>`;
+    $('boardHint').textContent = inSetup()
+      ? 'Tap any corner of the map to put Starbucks there. Then make your first move.'
+      : MODES[mode].hint;
+  }
+
+  // Extra settings some modes have. They live in a row under the board sizes.
+  function renderOptions() {
+    const box = $('options');
+    box.innerHTML = '';
+    if (inSetup()) {
+      if (isRail()) {
+        box.appendChild(stepper('Size', n, v => setBoard(v, v)));
+      } else {
+        box.appendChild(stepper('Width', n, v => setBoard(v, m)));
+        box.appendChild(stepper('Height', m, v => setBoard(n, v)));
+      }
+    }
+    if (isRail()) {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.id = 'railLong';
+      b.setAttribute('aria-pressed', railLong ? 'true' : 'false');
+      b.textContent = `Long moves: ${railLong ? 'on' : 'off'}`;
+      b.addEventListener('click', () => setRailLong(!railLong));
+      box.appendChild(b);
+    }
+    if (isChaosMode()) {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      label.textContent = 'To stop endless games: ';
+      const sel = document.createElement('select');
+      sel.id = 'chaosRule';
+      Object.keys(CHAOS_RULES).forEach(k => {
+        const o = document.createElement('option');
+        o.value = k;
+        o.textContent = CHAOS_RULES[k].label;
+        o.selected = k === chaosRule;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => setChaosRule(sel.value));
+      label.appendChild(sel);
+      box.appendChild(label);
+    }
+    box.hidden = !box.children.length;
+  }
+
   function render() {
-    renderSizes();
+    renderModes();
+    renderOptions();
+    renderRules();
     renderBoard();
+    renderSteps();
     renderTurn();
     renderWord();
     renderLog();
     renderScores();
   }
 
-  document.querySelectorAll('.size-btn').forEach(b => b.addEventListener('click', () => setSize(b.dataset.size)));
-  $('btnN').addEventListener('click', () => move('N'));
-  $('btnE').addEventListener('click', () => move('E'));
+  $('btnN').addEventListener('click', () => move('N', steps));
+  $('btnE').addEventListener('click', () => move('E', steps));
+  const backSteps = () => (chaosRuleNow() === 'cap' ? 1 : steps);
+  $('btnS').addEventListener('click', () => move('S', backSteps()));
+  $('btnW').addEventListener('click', () => move('W', backSteps()));
   $('btnUndo').addEventListener('click', undo);
   $('btnNew').addEventListener('click', newGame);
+  $('btnBoard').addEventListener('click', changeBoard);
+  $('btnHint').addEventListener('click', showHint);
   document.addEventListener('keydown', e => {
-    if (e.target.closest && e.target.closest('input, textarea')) return;
+    if (e.target.closest && e.target.closest('input, textarea, select')) return;
     const k = e.key;
-    if (k === 'ArrowUp') { e.preventDefault(); move('N'); }
-    else if (k === 'ArrowRight') { e.preventDefault(); move('E'); }
+    if (k === 'ArrowUp') { e.preventDefault(); move('N', steps); }
+    else if (k === 'ArrowRight') { e.preventDefault(); move('E', steps); }
+    else if (k === 'ArrowDown') { e.preventDefault(); move('S', backSteps()); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); move('W', backSteps()); }
     else if (k === 'u' || k === 'U') undo();
     else if (k === 'r' || k === 'R') newGame();
+    else if (k === 'b' || k === 'B') changeBoard();
+    else if ((k === 'h' || k === 'H') && hasSolver() && !isOver()) showHint();
+    else if (isLong() && /^[1-9]$/.test(k)) setSteps(Number(k));
   });
 
+  // Hooks for the self-check script below. They run the real game code on a
+  // temporary board, then put the live game back the way it was.
+  function withState(opts, fn) {
+    const saved = { mode, n, m, path, moves, railLong, chaosRule };
+    mode = opts.mode; n = opts.n; m = opts.m;
+    railLong = !!opts.railLong; chaosRule = opts.chaosRule || 'cap';
+    path = [{ x: 0, y: 0 }]; moves = [];
+    try { return fn(); }
+    finally { ({ mode, n, m, path, moves, railLong, chaosRule } = saved); }
+  }
+  window.CoffeeShopCheck = {
+    countPaths,
+    // Is corner (x, y) a loss for the player who must move from it?
+    losingAt: (opts, x, y) => withState(opts, () => makeSolver()(x, y)),
+    // Play one game with random legal moves. Returns the winner and the move count.
+    randomGame: opts => withState(opts, () => {
+      while (!isOver()) {
+        const all = legalMoves();
+        const mv = all[Math.floor(Math.random() * all.length)];
+        path.push({ x: mv.x, y: mv.y });
+        moves.push({ d: mv.d, k: mv.k });
+      }
+      return { winner: isDraw() ? 0 : winner(), moves: moves.length };
+    })
+  };
+
   render();
+})();
+</script>
+
+<script>
+// Self-check for the math facts in our write-up. Open the browser console to see
+// the result. Nothing here is hard-coded: every value is computed by the game code.
+(function () {
+  const T = window.CoffeeShopCheck;
+  if (!T) return;
+  let pass = 0, fail = 0;
+  const check = (name, got, want) => {
+    if (got === want) { pass++; return; }
+    fail++;
+    console.error(`Self-check FAILED: ${name}. Got ${got}, wanted ${want}.`);
+  };
+  const any = () => true;
+  const aboveTrack = (x, y) => y >= x;
+
+  // Paths on an n×m board: C(n + m, m).
+  check('paths on 2×2', T.countPaths(2, 2, any), 6);
+  check('paths on 3×2', T.countPaths(3, 2, any), 10);
+  check('paths on 3×3', T.countPaths(3, 3, any), 20);
+  check('paths on 5×4', T.countPaths(5, 4, any), 126);
+
+  // Corner rule: paths(x, y) = paths(x − 1, y) + paths(x, y − 1), with 1s on the edges.
+  check('bottom row is 1s', T.countPaths(4, 0, any), 1);
+  check('left column is 1s', T.countPaths(0, 3, any), 1);
+  check('corner rule at (2, 1)', T.countPaths(2, 1, any), T.countPaths(1, 1, any) + T.countPaths(2, 0, any));
+  check('corner rule at (3, 2)', T.countPaths(3, 2, any), T.countPaths(2, 2, any) + T.countPaths(3, 1, any));
+
+  // Catalan numbers: paths that stay on or above the track, n = 0 to 5.
+  [1, 1, 2, 5, 14, 42].forEach((want, k) => check(`Catalan ${k}`, T.countPaths(k, k, aboveTrack), want));
+
+  // Classic winner: n + m odd means Player 1 wins, even means Player 2.
+  [[3, 2], [3, 3], [5, 4], [4, 4], [5, 5]].forEach(([n, m]) => {
+    const p1Loses = T.losingAt({ mode: 'classic', n, m }, 0, 0);
+    check(`classic winner on ${n}×${m}`, p1Loses ? 2 : 1, (n + m) % 2 === 1 ? 1 : 2);
+  });
+
+  // Long moves: equal blocks left East and North is a loss for the player to move.
+  for (let x = 0; x <= 5; x++) for (let y = 0; y <= 4; y++) {
+    check(`long moves at (${x}, ${y})`, T.losingAt({ mode: 'long', n: 5, m: 4 }, x, y), (5 - x) === (4 - y));
+  }
+
+  // Railroad with 1-block moves: every game takes 2n moves, so Player 2 always wins.
+  [3, 4, 5].forEach(k => check(`railroad ${k}×${k} is a Player 2 win`, T.losingAt({ mode: 'rail', n: k, m: k }, 0, 0), true));
+
+  // Chaos mode must always end under each setting. Play random games and watch the move count.
+  [[3, 2], [3, 3], [5, 4]].forEach(([n, m]) => {
+    ['cap', 'tokens', 'limit'].forEach(rule => {
+      let longest = 0, draws = 0;
+      for (let g = 0; g < 40; g++) {
+        const r = T.randomGame({ mode: 'chaos', n, m, chaosRule: rule });
+        longest = Math.max(longest, r.moves);
+        if (r.winner === 0) draws++;
+      }
+      const limit = rule === 'limit' ? 30 : 200;
+      check(`chaos (${rule}) ends on ${n}×${m} (longest ${longest} moves)`, longest <= limit, true);
+      if (rule !== 'limit') check(`chaos (${rule}) never ends in a draw on ${n}×${m}`, draws, 0);
+    });
+  });
+
+  console.log(`Self-check: ${pass} of ${pass + fail} passed${fail ? '. See errors above.' : '.'}`);
 })();
 </script>
 </body>
