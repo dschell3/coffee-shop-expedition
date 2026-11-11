@@ -63,14 +63,14 @@ Long-move rules, and on every 3rd turn of the game (turns 3, 6, 9, and so on) th
 ### After a board's first game
 The rules box adds "With best play, Player X wins on this board" (from the solver). It only shows once that board has a finished game in that mode, so the first game stays a surprise. Chaos never shows it, since moves can loop.
 
-## Puzzle Mode (to build, narrowly)
+## Puzzles (built)
 
-A 5th pill in the mode row, "Puzzles". One player. No auto-opening intro screen. Three levels that walk through the math in our write-up, one commit each:
-1. **Find every path** on 2×2, then 3×2. Trace a path. It's recorded as a word (NNEE). Repeats are rejected. Show "4 of 6 found." On completion, show "4 choose 2 = (4 × 3) ÷ (2 × 1) = 6."
-2. **Fill in the corners.** The player types how many paths reach each corner. Check each one with the "below + left" rule.
-3. **Railroad.** Count the paths that stay on or above the track: 2, 5, 14.
+A 5th pill in the mode row, "Puzzles". One player, drawn in Player 1's color. No auto-opening intro screen. Level pills 1, 2, 3 sit in the turn card, with a "Reset this level" button. Each level fixes its own boards (the player can't change them), and leaving Puzzles brings back the board the player had. Progress lives in memory for the session only.
+1. **Find every path** on 2×2, then 3×2. Trace a route with taps or arrow keys. Reaching Starbucks records it as a word (NNEE) and clears the board. Repeats are rejected. Found routes are drawn faintly. Shows "4 of 6 found." On completion, shows "4 choose 2 = (4 × 3) ÷ (2 × 1) = 6" (built by `chooseText`, never typed in).
+2. **Fill in the corners** on 3×3. The bottom row and left column are prefilled with 1s. A corner shows "?" once the corners below it and to its left are known. Tapping it (or Enter on the focused box) opens a number field. Right answers lock in. Wrong ones say "Add the corner below (b) and the corner to the left (l)." Ends with "20 routes reach Starbucks. Same as 6 choose 3."
+3. **Railroad** on 2×2, 3×3, 4×4 with the track. Same fill-in, but corners under the track are off limits and count 0. Ends with "2, 5, 14. These are called Catalan numbers."
 
-The write-up's "Roadwork" level (closed streets) is out of scope. The game block is done: don't add modes or settings beyond this file.
+The write-up's "Roadwork" level (closed streets) is out of scope. The game block is done: don't add modes, settings or levels beyond this file.
 
 ## Math facts to keep correct
 
