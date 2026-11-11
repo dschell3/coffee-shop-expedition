@@ -153,6 +153,25 @@
   .puzzle-status .togo { font-size: 0.9rem; }
   .mono { font-family: var(--mono); letter-spacing: 0.08em; }
   .found { stroke: var(--p1); opacity: .22; }
+  .cbox rect { fill: var(--card); stroke: var(--line); }
+  .cbox text { fill: var(--muted); }
+  .cbox.done rect { fill: var(--block); stroke: var(--dot); }
+  .cbox.done text { fill: var(--ink); }
+  .cbox.ask { cursor: pointer; }
+  .cbox.ask rect { stroke: var(--p1); stroke-dasharray: 5 4; }
+  .cbox.ask text { fill: var(--p1); }
+  .cbox.ask:hover rect, .cbox.asking rect { fill: var(--block); stroke-dasharray: none; stroke-width: 3.5; }
+  .cbox.ask:focus-visible { outline: none; }
+  .cbox.ask:focus-visible rect { stroke-width: 4; stroke-dasharray: none; }
+  .ask-form { margin-top: 8px; }
+  .ask-form label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .ask-row { display: flex; gap: 8px; }
+  .ask-row input {
+    flex: 1; min-width: 0; font: inherit; font-size: 1.1rem; font-weight: 700; min-height: 44px; padding: 6px 12px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--btn-bg); color: var(--ink);
+  }
+  .ask-row input:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
+  .ask-row .btn { padding-inline: 18px; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn:focus-visible, .size-btn:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
   .keys { color: var(--muted); font-size: 0.82rem; margin: 8px 0 0; }
@@ -235,7 +254,7 @@
         </div>
       </section>
 
-      <details class="card fold" open>
+      <details class="card fold" id="routeCard" open>
         <summary><h2>Route so far</h2></summary>
         <div class="body">
           <div class="word" id="word"></div>
@@ -328,6 +347,7 @@
   ];
   let puzzle = { level: 0, stage: 0, found: [], filled: {}, msg: '' };
   let savedBoard = null;   // the two-player board to go back to after puzzles
+  const isFillLevel = () => isPuzzle() && puzzle.level === 1;
   const levelNow = () => LEVELS[puzzle.level];
 
   // Chaos moves could loop forever. These settings stop that. Try each one.
@@ -549,11 +569,12 @@
   function applyLevel() {
     [n, m] = levelNow().boards[puzzle.stage];
     setup = false;
+    if (isFillLevel()) prefillEdges();
     newGame();
   }
 
   function setLevel(i) {
-    puzzle = { level: i, stage: 0, found: [], filled: {}, msg: '' };
+    puzzle = { level: i, stage: 0, found: [], filled: {}, msg: '', asking: null };
     applyLevel();
   }
 
@@ -566,11 +587,59 @@
     puzzle.found = [];
     puzzle.filled = {};
     puzzle.msg = '';
+    puzzle.asking = null;
     applyLevel();
   }
 
   const routeTotal = () => countPaths(n, m, () => true);
-  const stageDone = () => puzzle.level === 0 && puzzle.found.length === routeTotal();
+  const key = (x, y) => `${x},${y}`;
+  const filledAt = (x, y) => puzzle.filled[key(x, y)];
+  const stageDone = () => (puzzle.level === 0 && puzzle.found.length === routeTotal()) ||
+    (isFillLevel() && filledAt(n, m) !== undefined);
+
+  // Levels 2 and 3: the right answer for a corner is the corner-rule count.
+  const answerAt = (x, y) => countPaths(x, y, cornerOk);
+  // A corner can be asked once the corners below it and to its left are known.
+  const known = (x, y) => x < 0 || y < 0 || !cornerOk(x, y) || filledAt(x, y) !== undefined;
+  const ready = (x, y) => cornerOk(x, y) && filledAt(x, y) === undefined && known(x - 1, y) && known(x, y - 1);
+
+  // Start with 1s along the bottom row and left column: only one way to reach those.
+  function prefillEdges() {
+    puzzle.filled = {};
+    for (let x = 0; x <= n; x++) if (cornerOk(x, 0)) puzzle.filled[key(x, 0)] = 1;
+    for (let y = 0; y <= m; y++) if (cornerOk(0, y)) puzzle.filled[key(0, y)] = 1;
+  }
+
+  function askCorner(x, y) {
+    if (!ready(x, y)) return;
+    puzzle.asking = { x, y };
+    puzzle.msg = '';
+    render();
+    const inp = $('answer');
+    if (inp) inp.focus();
+  }
+
+  function checkAnswer() {
+    const inp = $('answer');
+    if (!inp || !puzzle.asking) return;
+    const { x, y } = puzzle.asking;
+    const guess = Number(inp.value);
+    if (!inp.value.trim() || !Number.isFinite(guess)) { inp.focus(); return; }
+    const want = answerAt(x, y);
+    if (guess === want) {
+      puzzle.filled[key(x, y)] = want;
+      puzzle.asking = null;
+      puzzle.msg = `Right. ${want} route${want === 1 ? '' : 's'} reach (${x}, ${y}).`;
+      if (stageDone()) puzzle.msg = `<strong>${want} routes reach Starbucks.</strong> Same as ${chooseText(n + m, m).split(' = ')[0]}.`;
+    } else {
+      const below = cornerOk(x, y - 1) ? filledAt(x, y - 1) : 0;
+      const left = cornerOk(x - 1, y) ? filledAt(x - 1, y) : 0;
+      puzzle.msg = `Not quite. Add the corner below (${below}) and the corner to the left (${left}).`;
+    }
+    render();
+    const again = $('answer');
+    if (again) again.focus();
+  }
   const lastStage = () => puzzle.stage === levelNow().boards.length - 1;
 
   // Level 1: a route is recorded when the trace reaches Starbucks. Then the board
@@ -709,8 +778,26 @@
       });
     }
 
-    const tokenColor = isOver() ? colorFor(moves.length - 1) : colorFor(moves.length);
-    s += `<circle cx="${X(c.x)}" cy="${Y(c.y)}" r="15" style="fill:${tokenColor};stroke:var(--token-ring)" stroke-width="4"/>`;
+    if (isFillLevel()) {
+      // A number box on every corner: the count if known, a ? if it can be asked now.
+      for (let x = 0; x <= n; x++) for (let y = 0; y <= m; y++) {
+        if (!cornerOk(x, y)) continue;
+        const v = filledAt(x, y);
+        const isAsk = ready(x, y);
+        const asking = puzzle.asking && puzzle.asking.x === x && puzzle.asking.y === y;
+        const cls = v !== undefined ? 'cbox done' : (isAsk ? 'cbox ask' : 'cbox');
+        const extra = isAsk ? ` role="button" tabindex="0" data-x="${x}" data-y="${y}"` : '';
+        const text = v !== undefined ? v : (isAsk ? '?' : '');
+        s += `<g class="${cls}${asking ? ' asking' : ''}"${extra}>
+          ${isAsk ? `<title>How many routes reach (${x}, ${y})?</title>` : ''}
+          <rect x="${X(x) - 22}" y="${Y(y) - 22}" width="44" height="44" rx="10" stroke-width="2.5"/>
+          <text x="${X(x)}" y="${Y(y) + 6}" text-anchor="middle" font-size="18" font-weight="700">${text}</text>
+        </g>`;
+      }
+    } else {
+      const tokenColor = isOver() ? colorFor(moves.length - 1) : colorFor(moves.length);
+      s += `<circle cx="${X(c.x)}" cy="${Y(c.y)}" r="15" style="fill:${tokenColor};stroke:var(--token-ring)" stroke-width="4"/>`;
+    }
 
     s += `</svg>`;
     $('board').innerHTML = s;
@@ -719,6 +806,11 @@
     });
     $('board').querySelectorAll('.place').forEach(el => {
       el.addEventListener('click', () => setBoard(Number(el.dataset.x), Number(el.dataset.y)));
+    });
+    $('board').querySelectorAll('.cbox.ask').forEach(el => {
+      const go = () => askCorner(Number(el.dataset.x), Number(el.dataset.y));
+      el.addEventListener('click', go);
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
     });
   }
 
@@ -747,6 +839,20 @@
       if (stageDone()) {
         next = lastStage()
           ? `<p class="togo">Level done. You found every route on every board. Try level ${puzzle.level + 2}.</p>`
+          : `<button class="btn" id="btnNext">Next board: ${L.boards[puzzle.stage + 1].join(' × ')}</button>`;
+      }
+    }
+    if (isFillLevel()) {
+      const total = Object.keys(puzzle.filled).length;
+      const all = (n + 1) * (m + 1);
+      const ask = puzzle.asking
+        ? `<form class="ask-form" id="askForm"><label for="answer">How many routes reach (${puzzle.asking.x}, ${puzzle.asking.y})?</label>
+           <div class="ask-row"><input id="answer" type="number" inputmode="numeric" min="0" step="1" autocomplete="off"><button class="btn" type="submit" id="btnCheck">Check</button></div></form>`
+        : (stageDone() ? '' : '<p>Tap a corner marked <strong>?</strong>. Routes to a corner = routes to the corner below it + routes to the corner on its left.</p>');
+      status = `<p><strong>${total} of ${all} corners filled.</strong> ${stage}</p>${puzzle.msg ? `<p>${puzzle.msg}</p>` : ''}${ask}`;
+      if (stageDone()) {
+        next = lastStage()
+          ? `<p class="togo">Level done. Try level ${puzzle.level + 2}.</p>`
           : `<button class="btn" id="btnNext">Next board: ${L.boards[puzzle.stage + 1].join(' × ')}</button>`;
       }
     }
@@ -854,6 +960,7 @@
 
   function renderScores() {
     $('logCard').hidden = $('scoreCard').hidden = isPuzzle();
+    $('routeCard').hidden = isFillLevel();
     if (isPuzzle()) return;
     $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
     const showDraws = isChaosMode();
@@ -910,6 +1017,11 @@
   }
 
   function renderRules() {
+    if (isPuzzle()) {
+      $('rules').innerHTML = `<p>${MODES.puzzle.rules}</p><p>Level ${puzzle.level + 1}: ${levelNow().about}</p>`;
+      $('boardHint').textContent = isFillLevel() ? 'Tap a corner marked ? to answer it.' : (puzzle.level === 0 ? 'Tap a glowing corner or press ↑ / →.' : MODES.puzzle.hint);
+      return;
+    }
     const all = countPaths(n, m, () => true);
     let count = `There are ${all} different routes from Start to Starbucks on this board.`;
     if (isRail()) {
@@ -934,6 +1046,7 @@
   function renderOptions() {
     const box = $('options');
     box.innerHTML = '';
+    if (isPuzzle()) { box.hidden = true; return; }
     if (inSetup()) {
       if (isRail()) {
         box.appendChild(stepper('Size', n, v => setBoard(v, v)));
@@ -993,6 +1106,7 @@
   $('btnBoard').addEventListener('click', changeBoard);
   $('btnPuzzleReset').addEventListener('click', resetLevel);
   $('turn').addEventListener('click', e => { if (e.target.id === 'btnNext') nextStage(); });
+  $('turn').addEventListener('submit', e => { if (e.target.id === 'askForm') { e.preventDefault(); checkAnswer(); } });
   $('btnHint').addEventListener('click', showHint);
   document.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input, textarea, select')) return;
