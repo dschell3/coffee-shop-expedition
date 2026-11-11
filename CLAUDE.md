@@ -5,14 +5,13 @@ A playable web version of the Coffee Shop Expedition, a lattice-path game for a 
 ## Repo layout
 
 ```
-/index.html        v1 (rough prototype). FROZEN: do not edit until Darren says so.
+/index.html        the live page. Kept as an exact copy of /v2/index.html.
 /v2/index.html     v2, the version we're building now
 /CLAUDE.md         this file
 ```
 
 - Hosted on GitHub Pages: v1 at `https://dschell3.github.io/coffee-shop-expedition/`, v2 at `.../coffee-shop-expedition/v2/`.
-- The printed QR code in our write-up points to the root URL. When v2 is done, Darren will copy it over `/index.html`. Until then, never touch the root file.
-- Start v2 from a copy of v1 (`/index.html`) and build on it.
+- The printed QR code in our write-up points to the root URL. Edit `/v2/index.html`, then copy it over `/index.html` in the same commit so the two never drift.
 
 ## Hard constraints
 
