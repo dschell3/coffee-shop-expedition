@@ -113,6 +113,13 @@
   .dot { fill: var(--dot); }
   .dot.off { fill: var(--card); stroke: var(--dot); stroke-width: 2; }
   .track { stroke: var(--cup); opacity: .8; }
+  .street.map { opacity: .45; }
+  .place { cursor: pointer; }
+  .place circle { fill: var(--card); stroke: var(--dot); }
+  .place:hover circle { fill: var(--block); stroke: var(--cup); r: 12; }
+  .stepper { gap: 6px; }
+  .stepper strong { min-width: 1.4em; text-align: center; color: var(--ink); font-size: 1.05rem; }
+  .stepper .size-btn { min-width: 44px; padding-inline: 10px; }
   .axis { fill: var(--axis); }
   .lbl { fill: var(--ink); }
   .cup-fill { fill: var(--cup); }
@@ -159,8 +166,20 @@
   th:first-child, td:first-child { text-align: left; }
   tr.current td { font-weight: 700; }
 
-  details summary { cursor: pointer; font-weight: 600; }
-  details ol { padding-left: 20px; margin: 8px 0 0; font-size: 0.93rem; }
+  /* Collapsible side cards. The heading is the tap target. */
+  .fold { padding: 0; }
+  .fold > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; min-height: 48px; padding: 0 16px; border-radius: 14px;
+  }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary h2 { margin: 0; }
+  .fold > summary::after { content: '▸'; color: var(--muted); font-size: 1.1rem; transition: transform .2s; }
+  .fold[open] > summary::after { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .fold > summary::after { transition: none; } }
+  .fold > summary:focus-visible { outline: 3px solid var(--p1); outline-offset: -3px; }
+  .fold > .body { padding: 0 16px 16px; }
+  .fold ol:not(#log) { padding-left: 20px; margin: 0; font-size: 0.93rem; }
   footer { text-align: center; color: var(--muted); font-size: 0.82rem; padding-top: 16px; }
 </style>
 </head>
@@ -207,36 +226,42 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>Route so far</h2>
-        <div class="word" id="word"></div>
-      </section>
+      <details class="card fold" open>
+        <summary><h2>Route so far</h2></summary>
+        <div class="body">
+          <div class="word" id="word"></div>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2>Move log</h2>
-        <ol id="log"></ol>
-        <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
-      </section>
+      <details class="card fold">
+        <summary><h2>Move log</h2></summary>
+        <div class="body">
+          <ol id="log"></ol>
+          <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2 id="scoreTitle">Scoreboard</h2>
-        <table>
-          <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th><th id="drawHead" hidden>Nobody</th></tr></thead>
-          <tbody id="scores"></tbody>
-        </table>
-      </section>
+      <details class="card fold">
+        <summary><h2 id="scoreTitle">Scoreboard</h2></summary>
+        <div class="body">
+          <table>
+            <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th><th id="drawHead" hidden>Nobody</th></tr></thead>
+            <tbody id="scores"></tbody>
+          </table>
+        </div>
+      </details>
 
-      <section class="card">
-        <details>
-          <summary>How to play</summary>
+      <details class="card fold">
+        <summary><h2>How to play</h2></summary>
+        <div class="body">
           <ol>
             <li>The token starts at the bottom-left corner. The coffee shop is at the top-right corner.</li>
             <li>Players take turns. Player 1 goes first.</li>
             <li>On your turn, move one block North (↑) or East (→). No diagonals and no going back.</li>
             <li>Whoever moves the token into the coffee shop wins.</li>
           </ol>
-        </details>
-      </section>
+        </div>
+      </details>
     </aside>
   </main>
 
@@ -303,8 +328,14 @@
   const cornerOk = (x, y) => !isRail() || y >= x;
 
   let mode = 'classic';
-  let sizeKey = '3x2';
+  let sizeKey = '3x2';           // a preset key, or 'custom'
   let n = 3, m = 2;
+  const MAXB = 6;                // biggest custom board, so it still fits on a phone
+  let custom = { n: 4, m: 3 };   // the last custom size chosen
+  const isCustom = () => sizeKey === 'custom';
+  // Setup is the time before the first move, when Starbucks can still be placed.
+  const inSetup = () => isCustom() && moves.length === 0;
+  const boardKey = () => `${n}x${m}`;
   let path = [{ x: 0, y: 0 }];
   let moves = [];      // each move is { d: 'N' | 'E', k: blocks }
   let steps = 1;       // how many blocks the buttons and arrow keys move (long-move modes)
@@ -434,7 +465,7 @@
     steps = 1;
     hintText = '';
     if (isOver()) {
-      const s = scoreFor(sizeKey);
+      const s = scoreFor(boardKey());
       s.games++;
       if (isDraw()) s.draws++;
       else if (winner() === 1) s.p1++;
@@ -467,8 +498,23 @@
 
   function setSize(key) {
     sizeKey = key;
-    [n, m] = SIZES[key];
+    if (key === 'custom') {
+      // Railroad boards are always square.
+      n = custom.n;
+      m = isRail() ? custom.n : custom.m;
+    } else {
+      [n, m] = SIZES[key];
+    }
     newGame();
+  }
+
+  // Set the custom board size (Starbucks goes to corner (w, h)). Only during setup.
+  function setCustom(w, h) {
+    const clamp = v => Math.max(1, Math.min(MAXB, v));
+    w = clamp(w);
+    h = isRail() ? w : clamp(h);
+    custom = { n: w, m: h };
+    setSize('custom');
   }
 
   function setRailLong(on) {
@@ -485,7 +531,7 @@
     mode = key;
     // If this mode doesn't offer the current board, fall back to its first one.
     const boards = MODES[mode].boards;
-    setSize(boards.includes(sizeKey) ? sizeKey : boards[0]);
+    setSize(boards.includes(sizeKey) || isCustom() ? sizeKey : boards[0]);
   }
 
   function cupIcon(cx, cy) {
@@ -501,12 +547,22 @@
 
   function renderBoard() {
     const cell = 90, padL = 64, padR = 72, padT = 88, padB = 76;
-    const W = n * cell + padL + padR, H = m * cell + padT + padB;
+    // During custom setup the drawing shows a bigger map, so Starbucks can be placed on any corner of it.
+    const setup = inSetup();
+    const mw = setup ? MAXB : n, mh = setup ? MAXB : m;
+    const W = mw * cell + padL + padR, H = mh * cell + padT + padB;
     const X = x => padL + x * cell;
-    const Y = y => padT + (m - y) * cell;
+    const Y = y => padT + (mh - y) * cell;
     const c = cur();
     const railNote = isRail() ? ' A train track runs along the diagonal; corners below it are off limits.' : '';
-    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${MODES[mode].name} mode, ${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).${railNote}">`;
+    const setupNote = setup ? ' Setup: tap any corner of the map to put the coffee shop there.' : '';
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${MODES[mode].name} mode, ${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).${railNote}${setupNote}">`;
+
+    if (setup) {
+      // Faint map streets and corners beyond the current board.
+      for (let x = 0; x <= mw; x++) s += `<line class="street map" x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(mh)}" stroke-width="2" stroke-dasharray="4 6"/>`;
+      for (let y = 0; y <= mh; y++) s += `<line class="street map" x1="${X(0)}" y1="${Y(y)}" x2="${X(mw)}" y2="${Y(y)}" stroke-width="2" stroke-dasharray="4 6"/>`;
+    }
 
     for (let x = 0; x < n; x++) for (let y = 0; y < m; y++) {
       // In railroad mode, blocks fully below the track are dimmed.
@@ -516,10 +572,10 @@
     for (let x = 0; x <= n; x++) s += `<line class="street" x1="${X(x)}" y1="${Y(0)}" x2="${X(x)}" y2="${Y(m)}" stroke-width="3" stroke-linecap="round"/>`;
     for (let y = 0; y <= m; y++) s += `<line class="street" x1="${X(0)}" y1="${Y(y)}" x2="${X(n)}" y2="${Y(y)}" stroke-width="3" stroke-linecap="round"/>`;
 
-    for (let x = 0; x <= n; x++) s += `<text class="axis" x="${X(x)}" y="${Y(0) + 34}" text-anchor="middle" font-size="13">${x}</text>`;
-    for (let y = 1; y <= m; y++) s += `<text class="axis" x="${X(0) - 26}" y="${Y(y) + 4}" text-anchor="end" font-size="13">${y}</text>`;
+    for (let x = 0; x <= mw; x++) s += `<text class="axis" x="${X(x)}" y="${Y(0) + 34}" text-anchor="middle" font-size="13">${x}</text>`;
+    for (let y = 1; y <= mh; y++) s += `<text class="axis" x="${X(0) - 26}" y="${Y(y) + 4}" text-anchor="end" font-size="13">${y}</text>`;
     s += `<text class="lbl" x="${X(0)}" y="${Y(0) + 56}" text-anchor="middle" font-size="14" font-weight="700">Start</text>`;
-    s += `<text class="axis" x="${(X(0) + X(n)) / 2}" y="${Y(0) + 56}" text-anchor="middle" font-size="12">East →</text>`;
+    s += `<text class="axis" x="${(X(0) + X(mw)) / 2}" y="${Y(0) + 56}" text-anchor="middle" font-size="12">East →</text>`;
 
     for (let i = 0; i < moves.length; i++) {
       const a = path[i], b = path[i + 1];
@@ -532,6 +588,19 @@
     }
     if (isRail()) {
       s += `<line class="track" x1="${X(0)}" y1="${Y(0)}" x2="${X(n)}" y2="${Y(m)}" stroke-width="5" stroke-dasharray="10 8" stroke-linecap="round"><title>Train track</title></line>`;
+    }
+
+    if (setup) {
+      // Every corner of the map is a place Starbucks could go. The whole cell around
+      // a corner is the tap area, so the targets stay easy to hit on a phone.
+      for (let x = 1; x <= mw; x++) for (let y = 1; y <= mh; y++) {
+        if ((x === n && y === m) || (isRail() && x !== y)) continue;
+        s += `<g class="place" data-x="${x}" data-y="${y}" role="button" tabindex="-1">
+          <title>Put Starbucks at (${x}, ${y})</title>
+          <rect x="${X(x) - cell / 2}" y="${Y(y) - cell / 2}" width="${cell}" height="${cell}" fill="transparent"/>
+          <circle cx="${X(x)}" cy="${Y(y)}" r="9" stroke-width="2.5"/>
+        </g>`;
+      }
     }
 
     s += cupIcon(X(n), Y(m));
@@ -558,6 +627,9 @@
     $('board').innerHTML = s;
     $('board').querySelectorAll('.target').forEach(el => {
       el.addEventListener('click', () => move(el.dataset.move, Number(el.dataset.k)));
+    });
+    $('board').querySelectorAll('.place').forEach(el => {
+      el.addEventListener('click', () => setCustom(Number(el.dataset.x), Number(el.dataset.y)));
     });
   }
 
@@ -659,11 +731,17 @@
     $('scoreTitle').textContent = `Scoreboard · ${scoreName()}`;
     const showDraws = isChaosMode();
     $('drawHead').hidden = !showDraws;
-    $('scores').innerHTML = MODES[mode].boards.map(k => {
+    // Preset boards first, then any custom sizes played in this mode.
+    const keys = [...MODES[mode].boards];
+    Object.keys(scores[scoreMode()] || {})
+      .filter(k => !keys.includes(k) && scores[scoreMode()][k].games > 0)
+      .sort((a, b) => a.split('x').reduce((t, v) => t * 10 + Number(v), 0) - b.split('x').reduce((t, v) => t * 10 + Number(v), 0))
+      .forEach(k => keys.push(k));
+    $('scores').innerHTML = keys.map(k => {
       const s = scoreFor(k);
-      const [a, b] = SIZES[k];
+      const [a, b] = k.split('x');
       const draws = showDraws ? `<td>${s.draws}</td>` : '';
-      return `<tr class="${k === sizeKey ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td>${draws}</tr>`;
+      return `<tr class="${k === boardKey() ? 'current' : ''}"><td>${a} × ${b}</td><td>${s.games}</td><td>${s.p1}</td><td>${s.p2}</td>${draws}</tr>`;
     }).join('');
   }
 
@@ -685,7 +763,30 @@
   }
 
   function renderSizes() {
-    renderPills($('sizes'), MODES[mode].boards.map(k => [k, `${SIZES[k][0]} × ${SIZES[k][1]}`]), sizeKey, setSize);
+    const items = MODES[mode].boards.map(k => [k, `${SIZES[k][0]} × ${SIZES[k][1]}`]);
+    items.push(['custom', 'Custom']);
+    renderPills($('sizes'), items, sizeKey, setSize);
+  }
+
+  // A minus / number / plus control for the custom board size.
+  function stepper(label, value, onChange) {
+    const box = document.createElement('div');
+    box.className = 'opt stepper';
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', `Board ${label.toLowerCase()}`);
+    const mk = (text, aria, delta) => {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.textContent = text;
+      b.setAttribute('aria-label', aria);
+      b.disabled = value + delta < 1 || value + delta > MAXB;
+      b.addEventListener('click', () => onChange(value + delta));
+      return b;
+    };
+    const num = document.createElement('strong');
+    num.textContent = value;
+    box.append(`${label}:`, mk('−', `${label} down`, -1), num, mk('+', `${label} up`, 1));
+    return box;
   }
 
   function renderRules() {
@@ -693,18 +794,33 @@
     let count = `There are ${all} different routes from Start to Starbucks on this board.`;
     if (isRail()) {
       const ok = countPaths(n, m, cornerOk);
-      count = `This board has ${all} routes in all. Only ${ok} of them stay on or above the track.`;
+      count = `This board has ${all} routes in all. Only ${ok} of them ${ok === 1 ? 'stays' : 'stay'} on or above the track.`;
     }
     let rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
     if (isChaosMode()) rules += ' ' + CHAOS_RULES[chaosRule].text;
+    // On a custom board, say who should win. Chaos has no answer, since moves can loop.
+    if (isCustom() && !isChaosMode()) {
+      const p1Loses = makeSolver()(0, 0);
+      count += ` With best play, Player ${p1Loses ? 2 : 1} wins on this board.`;
+    }
     $('rules').innerHTML = `<p>${rules}</p><p>${count}</p>`;
-    $('boardHint').textContent = MODES[mode].hint;
+    $('boardHint').textContent = inSetup()
+      ? 'Tap any corner of the map to put Starbucks there. Then make your first move.'
+      : MODES[mode].hint;
   }
 
   // Extra settings some modes have. They live in a row under the board sizes.
   function renderOptions() {
     const box = $('options');
     box.innerHTML = '';
+    if (inSetup()) {
+      if (isRail()) {
+        box.appendChild(stepper('Size', n, v => setCustom(v, v)));
+      } else {
+        box.appendChild(stepper('Width', n, v => setCustom(v, m)));
+        box.appendChild(stepper('Height', m, v => setCustom(n, v)));
+      }
+    }
     if (isRail()) {
       const b = document.createElement('button');
       b.className = 'size-btn';
