@@ -159,8 +159,20 @@
   th:first-child, td:first-child { text-align: left; }
   tr.current td { font-weight: 700; }
 
-  details summary { cursor: pointer; font-weight: 600; }
-  details ol { padding-left: 20px; margin: 8px 0 0; font-size: 0.93rem; }
+  /* Collapsible side cards. The heading is the tap target. */
+  .fold { padding: 0; }
+  .fold > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; min-height: 48px; padding: 0 16px; border-radius: 14px;
+  }
+  .fold > summary::-webkit-details-marker { display: none; }
+  .fold > summary h2 { margin: 0; }
+  .fold > summary::after { content: '▸'; color: var(--muted); font-size: 1.1rem; transition: transform .2s; }
+  .fold[open] > summary::after { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { .fold > summary::after { transition: none; } }
+  .fold > summary:focus-visible { outline: 3px solid var(--p1); outline-offset: -3px; }
+  .fold > .body { padding: 0 16px 16px; }
+  .fold ol:not(#log) { padding-left: 20px; margin: 0; font-size: 0.93rem; }
   footer { text-align: center; color: var(--muted); font-size: 0.82rem; padding-top: 16px; }
 </style>
 </head>
@@ -207,36 +219,42 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>Route so far</h2>
-        <div class="word" id="word"></div>
-      </section>
+      <details class="card fold" open>
+        <summary><h2>Route so far</h2></summary>
+        <div class="body">
+          <div class="word" id="word"></div>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2>Move log</h2>
-        <ol id="log"></ol>
-        <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
-      </section>
+      <details class="card fold">
+        <summary><h2>Move log</h2></summary>
+        <div class="body">
+          <ol id="log"></ol>
+          <p class="muted" id="logEmpty">No moves yet. Player 1 goes first.</p>
+        </div>
+      </details>
 
-      <section class="card">
-        <h2 id="scoreTitle">Scoreboard</h2>
-        <table>
-          <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th><th id="drawHead" hidden>Nobody</th></tr></thead>
-          <tbody id="scores"></tbody>
-        </table>
-      </section>
+      <details class="card fold">
+        <summary><h2 id="scoreTitle">Scoreboard</h2></summary>
+        <div class="body">
+          <table>
+            <thead><tr><th>Board</th><th>Games</th><th>P1 wins</th><th>P2 wins</th><th id="drawHead" hidden>Nobody</th></tr></thead>
+            <tbody id="scores"></tbody>
+          </table>
+        </div>
+      </details>
 
-      <section class="card">
-        <details>
-          <summary>How to play</summary>
+      <details class="card fold">
+        <summary><h2>How to play</h2></summary>
+        <div class="body">
           <ol>
             <li>The token starts at the bottom-left corner. The coffee shop is at the top-right corner.</li>
             <li>Players take turns. Player 1 goes first.</li>
             <li>On your turn, move one block North (↑) or East (→). No diagonals and no going back.</li>
             <li>Whoever moves the token into the coffee shop wins.</li>
           </ol>
-        </details>
-      </section>
+        </div>
+      </details>
     </aside>
   </main>
 
