@@ -148,7 +148,11 @@
   .btn.move { font-size: 1.05rem; background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
   .btn.wide { grid-column: 1 / -1; }
   .puzzle-status { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--block); font-size: 0.95rem; }
-  .puzzle-status .togo { display: block; margin-top: 4px; font-size: 0.9rem; }
+  .puzzle-status p { margin: 0; }
+  .puzzle-status p + p, .puzzle-status .btn { margin-top: 8px; }
+  .puzzle-status .togo { font-size: 0.9rem; }
+  .mono { font-family: var(--mono); letter-spacing: 0.08em; }
+  .found { stroke: var(--p1); opacity: .22; }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
   .btn:focus-visible, .size-btn:focus-visible { outline: 3px solid var(--p1); outline-offset: 2px; }
   .keys { color: var(--muted); font-size: 0.82rem; margin: 8px 0 0; }
@@ -415,6 +419,14 @@
     return out.filter(mv => cornerOk(mv.x, mv.y));
   }
 
+  // Write "a choose b" the long way, e.g. "4 choose 2 = (4 × 3) ÷ (2 × 1) = 6".
+  function chooseText(a, b) {
+    const top = [], bottom = [];
+    let value = 1;
+    for (let i = 0; i < b; i++) { top.push(a - i); bottom.push(b - i); value = value * (a - i) / (i + 1); }
+    return `${a} choose ${b} = (${top.join(' × ')}) ÷ (${bottom.join(' × ')}) = ${Math.round(value)}`;
+  }
+
   // Count routes from Start to (w, h) with the corner rule:
   // paths(x, y) = paths(x - 1, y) + paths(x, y - 1). `ok(x, y)` says if a corner may be used.
   function countPaths(w, h, ok) {
@@ -432,7 +444,7 @@
 
   function legalMoves() {
     if (isOver()) return [];
-    if (isPuzzle()) return [];
+    if (isPuzzle() && (puzzle.level !== 0 || stageDone())) return [];
     const c = cur();
     const out = forwardMovesFrom(c.x, c.y);
     return isChaosTurn() ? out.concat(backMovesFrom(c.x, c.y)) : out;
@@ -485,7 +497,8 @@
     steps = 1;
     hintText = '';
     setup = false;
-    if (isOver() && !isPuzzle()) {
+    if (isPuzzle()) { puzzleMove(); render(); return; }
+    if (isOver()) {
       const s = scoreFor(boardKey());
       s.games++;
       if (isDraw()) s.draws++;
@@ -546,6 +559,35 @@
 
   function resetLevel() {
     setLevel(puzzle.level);
+  }
+
+  function nextStage() {
+    puzzle.stage++;
+    puzzle.found = [];
+    puzzle.filled = {};
+    puzzle.msg = '';
+    applyLevel();
+  }
+
+  const routeTotal = () => countPaths(n, m, () => true);
+  const stageDone = () => puzzle.level === 0 && puzzle.found.length === routeTotal();
+  const lastStage = () => puzzle.stage === levelNow().boards.length - 1;
+
+  // Level 1: a route is recorded when the trace reaches Starbucks. Then the board
+  // clears for the next trace.
+  function puzzleMove() {
+    if (puzzle.level !== 0 || !atGoal()) return;
+    const word = moves.map(mv => mv.d).join('');
+    if (puzzle.found.includes(word)) {
+      puzzle.msg = `You already found <strong class="mono">${word}</strong>. Try a different route.`;
+    } else {
+      puzzle.found.push(word);
+      puzzle.msg = stageDone()
+        ? `That's all of them! <strong>${chooseText(n + m, m)}</strong>`
+        : `Found <strong class="mono">${word}</strong>.`;
+    }
+    path = [{ x: 0, y: 0 }];
+    moves = [];
   }
 
   function setRailLong(on) {
@@ -615,6 +657,14 @@
     for (let y = 1; y <= mh; y++) s += `<text class="axis" x="${X(0) - 26}" y="${Y(y) + 4}" text-anchor="end" font-size="13">${y}</text>`;
     s += `<text class="lbl" x="${X(0)}" y="${Y(0) + 56}" text-anchor="middle" font-size="14" font-weight="700">Start</text>`;
     s += `<text class="axis" x="${(X(0) + X(mw)) / 2}" y="${Y(0) + 56}" text-anchor="middle" font-size="12">East →</text>`;
+
+    if (isPuzzle() && puzzle.level === 0) {
+      puzzle.found.forEach(word => {
+        let x = 0, y = 0, d = `M${X(0)} ${Y(0)}`;
+        for (const ch of word) { if (ch === 'E') x++; else y++; d += ` L${X(x)} ${Y(y)}`; }
+        s += `<path class="found" d="${d}" fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
+      });
+    }
 
     for (let i = 0; i < moves.length; i++) {
       const a = path[i], b = path[i + 1];
@@ -687,12 +737,24 @@
     const L = levelNow();
     $('levels').hidden = false;
     renderPills($('levels'), LEVELS.map((lv, i) => [i, `${i + 1}`]), puzzle.level, setLevel);
-    const stage = L.boards.length > 1 ? ` <span class="togo">Board ${puzzle.stage + 1} of ${L.boards.length}: ${n} × ${m}</span>` : '';
+    const stage = L.boards.length > 1 ? `Board ${puzzle.stage + 1} of ${L.boards.length}: ${n} × ${m}. ` : '';
+    let status = 'Coming next.';
+    let next = '';
+    if (puzzle.level === 0) {
+      const total = routeTotal();
+      const found = puzzle.found.length ? `<p class="togo">Found: <span class="mono">${puzzle.found.join(', ')}</span></p>` : '';
+      status = `<p><strong>${puzzle.found.length} of ${total} found.</strong> ${stage}</p>${puzzle.msg ? `<p>${puzzle.msg}</p>` : '<p>Walk to Starbucks. Each route you finish is saved as a word.</p>'}${found}`;
+      if (stageDone()) {
+        next = lastStage()
+          ? `<p class="togo">Level done. You found every route on every board. Try level ${puzzle.level + 2}.</p>`
+          : `<button class="btn" id="btnNext">Next board: ${L.boards[puzzle.stage + 1].join(' × ')}</button>`;
+      }
+    }
     $('turn').innerHTML = `
       <div class="turn">${puzzle.level + 1}. ${L.name}</div>
       <p class="togo">${L.about}</p>
-      <div class="puzzle-status" id="puzzleStatus">${puzzle.msg || 'Coming next.'}${stage}</div>`;
-    const tracing = false;  // level 1 turns this on
+      <div class="puzzle-status" id="puzzleStatus">${status}${next}</div>`;
+    const tracing = puzzle.level === 0 && !stageDone();
     $('btnN').hidden = $('btnE').hidden = $('btnUndo').hidden = !tracing;
     $('btnS').hidden = $('btnW').hidden = $('btnNew').hidden = $('btnBoard').hidden = true;
     $('btnPuzzleReset').hidden = false;
@@ -930,6 +992,7 @@
   $('btnNew').addEventListener('click', newGame);
   $('btnBoard').addEventListener('click', changeBoard);
   $('btnPuzzleReset').addEventListener('click', resetLevel);
+  $('turn').addEventListener('click', e => { if (e.target.id === 'btnNext') nextStage(); });
   $('btnHint').addEventListener('click', showHint);
   document.addEventListener('keydown', e => {
     if (e.target.closest && e.target.closest('input, textarea, select')) return;
@@ -957,6 +1020,7 @@
   }
   window.CoffeeShopCheck = {
     countPaths,
+    chooseText,
     // Is corner (x, y) a loss for the player who must move from it?
     losingAt: (opts, x, y) => withState(opts, () => makeSolver()(x, y)),
     // Play one game with random legal moves. Returns the winner and the move count.
@@ -1001,6 +1065,11 @@
   check('left column is 1s', T.countPaths(0, 3, any), 1);
   check('corner rule at (2, 1)', T.countPaths(2, 1, any), T.countPaths(1, 1, any) + T.countPaths(2, 0, any));
   check('corner rule at (3, 2)', T.countPaths(3, 2, any), T.countPaths(2, 2, any) + T.countPaths(3, 1, any));
+
+  // The "choose" formula written out, as puzzle 1 shows it, must match the route count.
+  check('4 choose 2 text', T.chooseText(4, 2), '4 choose 2 = (4 × 3) ÷ (2 × 1) = 6');
+  check('5 choose 2 text', T.chooseText(5, 2), '5 choose 2 = (5 × 4) ÷ (2 × 1) = 10');
+  check('9 choose 4 value', Number(T.chooseText(9, 4).split('= ').pop()), T.countPaths(5, 4, any));
 
   // Catalan numbers: paths that stay on or above the track, n = 0 to 5.
   [1, 1, 2, 5, 14, 42].forEach((want, k) => check(`Catalan ${k}`, T.countPaths(k, k, aboveTrack), want));
