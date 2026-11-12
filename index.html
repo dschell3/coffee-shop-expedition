@@ -220,8 +220,9 @@
 
   <main>
     <section class="card" aria-label="Game board">
-      <div class="sizes" role="group" aria-label="Game mode" id="modes">
-        <span>Mode:</span>
+      <div class="sizes" role="group" aria-label="Game mode" id="modes"></div>
+      <div class="sizes" role="group" aria-label="Board size" id="sizes" hidden>
+        <span>Board:</span>
       </div>
       <div class="sizes" role="group" aria-label="Rule switches" id="switches" hidden>
         <span>Rules:</span>
@@ -350,7 +351,7 @@
   // The hint solver only works without backward moves. Classic keeps its surprise, so no hint there.
   const hasSolver = () => isVariations() && !vary.chaos && (vary.long || vary.track);
   const keysText = () => isPuzzle() ? '↑ North · → East · U undo' : '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
-    (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R play again · B change board';
+    (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R play again' + (isClassic() ? '' : ' · B change board');
   // Can the token stand on corner (x, y) in this mode?
   const cornerOk = (x, y) => !isRail() || y >= x;
 
@@ -360,7 +361,11 @@
   // Setup is when Starbucks can still be placed: at the start, and after "Change board".
   // It ends with the first move. "Play again" keeps the board and skips setup.
   let setup = true;
-  const inSetup = () => setup && moves.length === 0;
+  // Classic keeps the three worksheet boards. Setup (placing Starbucks) is for Variations only.
+  const CLASSIC_BOARDS = [[3, 2], [3, 3], [5, 4]];
+  let classicBoard = 1;
+  const isClassic = () => mode === 'classic';
+  const inSetup = () => setup && moves.length === 0 && !isClassic();
   const boardKey = () => `${n}x${m}`;
   let path = [{ x: 0, y: 0 }];
   let moves = [];      // each move is { d: 'N' | 'E', k: blocks }
@@ -551,8 +556,14 @@
   }
 
   function changeBoard() {
-    if (isPuzzle()) return;
+    if (isPuzzle() || isClassic()) return;
     setup = true;
+    newGame();
+  }
+
+  function setClassicBoard(i) {
+    classicBoard = i;
+    [n, m] = CLASSIC_BOARDS[i];
     newGame();
   }
 
@@ -684,6 +695,7 @@
       return;
     }
     if (wasPuzzle && savedBoard) ({ n, m } = savedBoard);
+    if (isClassic()) [n, m] = CLASSIC_BOARDS[classicBoard];
     // Railroad needs a square board, so square it up if needed.
     if (isRail() && n !== m) m = n;
     newGame();
@@ -937,7 +949,7 @@
     $('btnS').disabled = !canMove('S', backSteps);
     $('btnW').disabled = !canMove('W', backSteps);
     $('btnUndo').disabled = !moves.length || isOver();
-    $('btnBoard').hidden = inSetup();
+    $('btnBoard').hidden = inSetup() || isClassic();
     $('keys').textContent = `Keyboard: ${keysText()}`;
     $('hintBox').hidden = !hasSolver() || isOver();
     $('hintOut').textContent = hintText;
@@ -1000,6 +1012,12 @@
 
   function renderModes() {
     renderPills($('modes'), Object.keys(MODES).map(k => [k, MODES[k].name]), mode, setMode);
+  }
+
+  function renderSizes() {
+    $('sizes').hidden = !isClassic();
+    if (!isClassic()) return;
+    renderPills($('sizes'), CLASSIC_BOARDS.map(([w, h], i) => [i, `${w} × ${h}`]), classicBoard, setClassicBoard);
   }
 
   // A minus / number / plus control for the board size.
@@ -1118,6 +1136,7 @@
 
   function render() {
     renderModes();
+    renderSizes();
     renderSwitches();
     renderOptions();
     renderRules();

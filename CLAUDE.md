@@ -27,17 +27,17 @@ A playable web version of the Coffee Shop Expedition, a lattice-path game for a 
 - State: `mode` (the tab: `classic`, `variations` or `puzzle`), `vary` (the three switches: `long`, `track`, `chaos`), `n, m` (board width and height; Starbucks is at corner `(n, m)`), `path` (array of `{x, y}` corners), `moves` (array of `{d, k}`: direction `'N' | 'E' | 'S' | 'W'` and how many blocks), and `setup` (true while Starbucks can still be placed).
 - `legalMoves()` lists every move from the current corner under the current mode. `move(d, k)`, `undo()`, `newGame()`, `setBoard(w, h)`, `setMode(key)`, then `render()` redraws everything: the SVG board, turn panel, route word, move log, and scoreboard.
 - The board is SVG built as a string. Moves are colored by player (P1 green, P2 orange). Glowing dashed circles mark the legal next corners and can be tapped.
-- **Board setup.** There are no board presets. Default is 3×3. At page load, and after "Change board", a faint 6×6 map appears and the player taps any corner to put Starbucks there (Width and Height steppers do the same for keyboard users). Setup ends with the first move. "Play again" keeps the board and skips setup. Railroad boards are always square.
+- **Boards.** Classic has three fixed boards as pills: 3×2, 3×3 (default), 5×4. Variations uses setup instead: on entering the tab, and after "Change board", a faint 6×6 map appears and the player taps any corner to put Starbucks there (Width and Height steppers do the same for keyboard users). Setup ends with the first move. "Play again" keeps the board and skips setup. Train track boards are always square.
 - `countPaths(w, h, ok)` is the corner-rule DP. `makeSolver()` says who wins from any corner in modes without backward moves. Both are reused by hints, the rules box, and the self-check.
 - Keys: ↑ North, → East, ↓ South and ← West on chaos turns, 1–9 block count, H hint, U undo, R play again, B change board.
 - The side cards (Route so far, Move log, Scoreboard, How to play) are collapsible. Route so far starts open. The turn card is always open.
 
 ## Tabs and rule switches (built)
 
-The top row has three tabs: **Classic**, **Variations**, **Puzzles**. The rules box under the board always says the rules in one or two sentences, plus the route count for the board. The scoreboard is kept per rule combination and board size.
+The top row has three tab pills with no label: **Classic**, **Variations**, **Puzzles**. The rules box under the board always says the rules in one or two sentences, plus the route count for the board. The scoreboard is kept per rule combination and board size.
 
 ### Classic
-The worksheet game, with nothing to set. Take turns moving 1 block North or East. Whoever reaches Starbucks wins. No hint button here, so the parity surprise stays a surprise.
+The worksheet game. Pick one of three boards (3×2, 3×3, 5×4), nothing else to set. Take turns moving 1 block North or East. Whoever reaches Starbucks wins. No hint button here, so the parity surprise stays a surprise.
 
 ### Variations
 The same game with three rule switches in a row under the tabs. Any mix is allowed. Default is Long moves on. All off is Classic rules, and the rules box says so.
