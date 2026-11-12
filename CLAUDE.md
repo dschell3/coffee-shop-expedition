@@ -24,7 +24,7 @@ A playable web version of the Coffee Shop Expedition, a lattice-path game for a 
 
 ## How the code works
 
-- State: `mode`, `n, m` (board width and height; Starbucks is at corner `(n, m)`), `path` (array of `{x, y}` corners), `moves` (array of `{d, k}`: direction `'N' | 'E' | 'S' | 'W'` and how many blocks), and `setup` (true while Starbucks can still be placed).
+- State: `mode` (the tab: `classic`, `variations` or `puzzle`), `vary` (the three switches: `long`, `track`, `chaos`), `n, m` (board width and height; Starbucks is at corner `(n, m)`), `path` (array of `{x, y}` corners), `moves` (array of `{d, k}`: direction `'N' | 'E' | 'S' | 'W'` and how many blocks), and `setup` (true while Starbucks can still be placed).
 - `legalMoves()` lists every move from the current corner under the current mode. `move(d, k)`, `undo()`, `newGame()`, `setBoard(w, h)`, `setMode(key)`, then `render()` redraws everything: the SVG board, turn panel, route word, move log, and scoreboard.
 - The board is SVG built as a string. Moves are colored by player (P1 green, P2 orange). Glowing dashed circles mark the legal next corners and can be tapped.
 - **Board setup.** There are no board presets. Default is 3×3. At page load, and after "Change board", a faint 6×6 map appears and the player taps any corner to put Starbucks there (Width and Height steppers do the same for keyboard users). Setup ends with the first move. "Play again" keeps the board and skips setup. Railroad boards are always square.
@@ -32,36 +32,27 @@ A playable web version of the Coffee Shop Expedition, a lattice-path game for a 
 - Keys: ↑ North, → East, ↓ South and ← West on chaos turns, 1–9 block count, H hint, U undo, R play again, B change board.
 - The side cards (Route so far, Move log, Scoreboard, How to play) are collapsible. Route so far starts open. The turn card is always open.
 
-## Modes (built)
+## Tabs and rule switches (built)
 
-The mode picker is a row of pills above the board. Each mode shows a one or two sentence rule summary under the board, plus the route count for the board. The scoreboard is kept per mode and board size.
+The top row has three tabs: **Classic**, **Variations**, **Puzzles**. The rules box under the board always says the rules in one or two sentences, plus the route count for the board. The scoreboard is kept per rule combination and board size.
 
 ### Classic
-Take turns moving 1 block North or East. Whoever reaches Starbucks wins.
+The worksheet game, with nothing to set. Take turns moving 1 block North or East. Whoever reaches Starbucks wins. No hint button here, so the parity surprise stays a surprise.
 
-### Long moves
-On your turn, move any number of blocks (at least 1), but all in one direction: all North or all East. Can't go past the edge.
-- Tapping any corner straight up or straight right of the token is a legal move. All are highlighted.
-- Math: this is two-pile Nim. With `a` blocks left East and `b` left North, the player to move is losing exactly when `a == b`. The winning move is to make them equal, then copy the opponent.
-- "Hint" button: shows the winning move if there is one, or says "No winning move. Try to make them slip up." Also available in Railroad.
+### Variations
+The same game with three rule switches in a row under the tabs. Any mix is allowed. Default is Long moves on. All off is Classic rules, and the rules box says so.
 
-### Railroad
-Square boards only. A track runs along the diagonal from Start to Starbucks. The token may touch the track but never cross below it. Legal corners have `y >= x`.
-- The track is a dashed line on the diagonal. Corners below it are dimmed and never offered as moves.
-- Math: the number of legal paths on an n×n board is the Catalan number: 1, 1, 2, 5, 14, 42 for n = 0 to 5.
-- With 1-block moves every game takes 2n moves, so Player 2 always wins. A "Long moves" toggle makes choices matter.
-
-### Chaos
-Long-move rules, and on every 3rd turn of the game (turns 3, 6, 9, and so on) the player may step back South or West instead. Can't leave the board, and can't step back onto Start.
-- On chaos turns a "Chaos turn! You may step back" banner shows and the backward corners are drawn dotted.
-- **Open design question: termination.** Backward moves can make the game loop forever. Three options sit behind a dropdown so the group can compare them. Default is option 1 until the group decides. Once decided, keep that one and delete the dropdown.
-  1. Backward moves are capped at 1 block (forward moves can still be long).
-  2. Each player gets 2 chaos moves per game, shown as coffee-cup tokens.
-  3. A 30-turn limit. If it runs out, nobody wins.
-- The old 1-block-only Chaos mode was built and then removed because it played the same as Classic (the parity argument below). Don't bring it back.
+- **Long moves.** Move any number of blocks (at least 1), all North or all East. Math: two-pile Nim. With `a` blocks left East and `b` left North, the player to move is losing exactly when `a == b`. The winning move makes them equal, then copies the opponent.
+- **Train track.** Square boards only (the board is squared up when the switch goes on). A dashed track runs along the diagonal. The token may touch it but never cross below it: legal corners have `y >= x`. Corners below are dimmed and never offered. Math: legal paths on an n×n board are the Catalan numbers 1, 1, 2, 5, 14, 42. With 1-block moves every game takes 2n moves, so Player 2 always wins; add Long moves to make choices matter.
+- **Chaos turns.** On every 3rd turn (3, 6, 9, ...) the player may step back South or West instead. Never off the board, never onto Start, and never below the track when the track is on. A "Chaos turn!" banner shows and the backward corners are drawn dotted. Turning this on turns Long moves on and locks it, with a note saying why: with 1-block moves the same player always wins (every move changes x + y by 1, so the move count has the parity of n + m).
+  - **Open design question: termination.** Backward moves can make the game loop forever. Three options sit behind a dropdown so the group can compare them. Default is option 1 until the group decides. Once decided, keep that one and delete the dropdown.
+    1. Backward moves are capped at 1 block (forward moves can still be long).
+    2. Each player gets 2 chaos moves per game, shown as coffee-cup tokens.
+    3. A 30-turn limit. If it runs out, nobody wins.
+- **Hint button** (H key) shows when Long moves or Train track is on and Chaos turns is off. It uses the solver: the winning move if there is one, else "No winning move. Try to make them slip up."
 
 ### After a board's first game
-The rules box adds "With best play, Player X wins on this board" (from the solver). It only shows once that board has a finished game in that mode, so the first game stays a surprise. Chaos never shows it, since moves can loop.
+The rules box adds "With best play, Player X wins on this board" (from the solver). It only shows once that board has a finished game with those rules, so the first game stays a surprise. Never with Chaos turns, since moves can loop.
 
 ## Puzzles (built)
 
@@ -70,7 +61,7 @@ A 5th pill in the mode row, "Puzzles". One player, drawn in Player 1's color. No
 2. **Fill in the corners** on 3×3. The bottom row and left column are prefilled with 1s. A corner shows "?" once the corners below it and to its left are known. Tapping it (or Enter on the focused box) opens a number field. Right answers lock in. Wrong ones say "Add the corner below (b) and the corner to the left (l)." Ends with "20 routes reach Starbucks. Same as 6 choose 3."
 3. **Railroad** on 2×2, 3×3, 4×4 with the track. Same fill-in, but corners under the track are off limits and count 0. Ends with "2, 5, 14. These are called Catalan numbers."
 
-The write-up's "Roadwork" level (closed streets) is out of scope. The game block is done: don't add modes, settings or levels beyond this file.
+The write-up's "Roadwork" level (closed streets) is out of scope. The game block is done: don't add tabs, switches, settings or levels beyond this file.
 
 ## Math facts to keep correct
 
