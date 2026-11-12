@@ -88,6 +88,7 @@
     padding: 6px 14px; min-height: 44px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer;
   }
   .size-btn[aria-pressed="true"] { background: var(--solid); color: var(--solid-ink); border-color: var(--solid); }
+  .size-btn:disabled { opacity: .55; cursor: not-allowed; }
   .steps { margin: 12px 0 0; }
   .opt { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 0.9rem; }
   select {
@@ -222,6 +223,9 @@
       <div class="sizes" role="group" aria-label="Game mode" id="modes">
         <span>Mode:</span>
       </div>
+      <div class="sizes" role="group" aria-label="Rule switches" id="switches" hidden>
+        <span>Rules:</span>
+      </div>
       <div class="sizes" role="group" aria-label="Board size and mode settings" id="options" hidden></div>
       <div id="board"></div>
       <div class="rules" id="rules"></div>
@@ -301,43 +305,23 @@
 (function () {
   const PCLASS = { 1: 'var(--p1)', 2: 'var(--p2)' };
   const DIRNAME = { N: 'North', E: 'East', S: 'South', W: 'West' };
+  // Three tabs. Classic is the worksheet game with nothing to set. Variations is the
+  // same game with three rule switches. Puzzles is one player.
   const MODES = {
-    classic: {
-      name: 'Classic',
-      rules: 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.',
-      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →.'
-    },
-    long: {
-      name: 'Long moves',
-      long: true,
-      solver: true,
-      rules: 'On your turn, move as many blocks as you like, but all North or all East. At least 1 block. Whoever reaches Starbucks wins.',
-      hint: 'Tap any glowing corner. Or pick how many blocks, then use the buttons.'
-    },
-    rail: {
-      name: 'Railroad',
-      rail: true,
-      solver: true,
-      rules: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move 1 block North or East.',
-      rulesLong: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Move as many blocks as you like, but all North or all East.',
-      hint: 'Tap a glowing corner, use the buttons, or press ↑ / →. Corners below the track are off limits.'
-    },
-    chaos: {
-      name: 'Chaos',
-      chaos: true,
-      long: true,
-      rules: 'Long moves: go as far as you like, all North or all East. On every 3rd turn (3, 6, 9, and so on), you may step back South or West instead. Never back onto Start.',
-      hint: 'Tap any glowing corner. Dotted corners step back on a chaos turn. This mode is an experiment, so try each setting.'
-    },
-    puzzle: {
-      name: 'Puzzles',
-      puzzle: true,
-      rules: 'One player. Three short puzzles that show the math behind the game.',
-      hint: 'Pick a level: 1, 2 or 3.'
-    }
+    classic: { name: 'Classic' },
+    variations: { name: 'Variations' },
+    puzzle: { name: 'Puzzles', rules: 'One player. Three short puzzles that show the math behind the game.', hint: 'Pick a level: 1, 2 or 3.' }
   };
-  const isChaosMode = () => !!MODES[mode].chaos;
-  const isPuzzle = () => !!MODES[mode].puzzle;
+  // The rule switches. They only apply on the Variations tab.
+  const SWITCHES = {
+    long: { name: 'Long moves', about: 'Move as many blocks as you like, but all North or all East. At least 1 block.' },
+    track: { name: 'Train track', about: 'A train track runs from Start to Starbucks (the dashed line). You may walk along the track, but never cross below it. Boards are square.' },
+    chaos: { name: 'Chaos turns', about: 'On every 3rd turn (3, 6, 9, and so on), you may step back South or West instead. Never back onto Start.' }
+  };
+  let vary = { long: true, track: false, chaos: false };
+  const isVariations = () => mode === 'variations';
+  const isChaosMode = () => isVariations() && vary.chaos;
+  const isPuzzle = () => mode === 'puzzle';
 
   // Puzzle levels. Each level fixes its own boards, played in order.
   const LEVELS = [
@@ -361,10 +345,10 @@
   const TURN_LIMIT = 30;
   let chaosRule = 'cap';
   const chaosRuleNow = () => chaosRule;
-  let railLong = false;  // Railroad mode with long moves turned on
-  const isLong = () => !!MODES[mode].long || (!!MODES[mode].rail && railLong);
-  const isRail = () => !!MODES[mode].rail || isRailLevel();
-  const hasSolver = () => !!MODES[mode].solver;
+  const isLong = () => isVariations() && vary.long;
+  const isRail = () => (isVariations() && vary.track) || isRailLevel();
+  // The hint solver only works without backward moves. Classic keeps its surprise, so no hint there.
+  const hasSolver = () => isVariations() && !vary.chaos && (vary.long || vary.track);
   const keysText = () => isPuzzle() ? '↑ North · → East · U undo' : '↑ North · → East' + (isChaosMode() ? ' · ↓ South · ← West on chaos turns' : '') +
     (isLong() ? ' · 1–9 picks how many blocks' : '') + (hasSolver() ? ' · H hint' : '') + ' · U undo · R play again · B change board';
   // Can the token stand on corner (x, y) in this mode?
@@ -384,8 +368,13 @@
   let hintText = '';   // last hint shown; cleared whenever the position changes
   // Scoreboard is kept for every mode (and mode option) and board size.
   const scores = {};
-  const scoreMode = () => mode + (isRail() && railLong ? '+long' : '');
-  const scoreName = () => MODES[mode].name + (isRail() && railLong ? ' + long moves' : '');
+  const onSwitches = () => Object.keys(SWITCHES).filter(k => vary[k]);
+  const scoreMode = () => (isVariations() ? 'v:' + onSwitches().join('+') : mode);
+  const scoreName = () => {
+    if (!isVariations()) return MODES[mode].name;
+    const on = onSwitches().map(k => SWITCHES[k].name);
+    return on.length ? on.join(' + ') : 'Variations (Classic rules)';
+  };
   function scoreFor(key) {
     const mk = scoreMode();
     scores[mk] = scores[mk] || {};
@@ -424,7 +413,8 @@
     const out = [];
     for (let k = 1; k <= maxW; k++) out.push({ d: 'W', k, x: x - k, y, back: true });
     for (let k = 1; k <= maxS; k++) out.push({ d: 'S', k, x, y: y - k, back: true });
-    return out.filter(mv => !(mv.x === 0 && mv.y === 0));
+    // Never onto Start, and never below the track when the track is on.
+    return out.filter(mv => !(mv.x === 0 && mv.y === 0) && cornerOk(mv.x, mv.y));
   }
 
   // Forward moves from corner (x, y) under the current mode. Each is { d, k, x, y }:
@@ -671,8 +661,11 @@
     moves = [];
   }
 
-  function setRailLong(on) {
-    railLong = on;
+  function setSwitch(key, on) {
+    vary[key] = on;
+    // Chaos needs long moves. With 1-block moves the same player always wins.
+    if (key === 'chaos' && on) vary.long = true;
+    if (isRail() && n !== m) m = n;
     newGame();
   }
 
@@ -718,7 +711,7 @@
     const c = cur();
     const railNote = isRail() ? ' A train track runs along the diagonal; corners below it are off limits.' : '';
     const setupNote = setup ? ' Setup: tap any corner of the map to put the coffee shop there.' : '';
-    let s = `<svg viewBox="0 0 ${W} ${H}" style="max-width:${Math.round(W * 1.2)}px;margin:0 auto" role="img" aria-label="${MODES[mode].name} mode, ${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).${railNote}${setupNote}">`;
+    let s = `<svg viewBox="0 0 ${W} ${H}" style="max-width:${Math.round(W * 1.2)}px;margin:0 auto" role="img" aria-label="${scoreName()}, ${n} by ${m} board. Token at (${c.x}, ${c.y}). Coffee shop at (${n}, ${m}).${railNote}${setupNote}">`;
 
     if (setup) {
       // Faint map streets and corners beyond the current board.
@@ -1042,8 +1035,17 @@
       const ok = countPaths(n, m, cornerOk);
       count = `This board has ${all} routes in all. Only ${ok} of them ${ok === 1 ? 'stays' : 'stay'} on or above the track.`;
     }
-    let rules = isRail() && railLong ? MODES.rail.rulesLong : MODES[mode].rules;
-    if (isChaosMode()) rules += ' ' + CHAOS_RULES[chaosRule].text;
+    let rules = 'Take turns. Move 1 block North or East. Whoever reaches Starbucks wins.';
+    if (isVariations()) {
+      const parts = ['Take turns.'];
+      parts.push(vary.long ? SWITCHES.long.about : 'Move 1 block North or East.');
+      if (vary.track) parts.push(SWITCHES.track.about);
+      if (vary.chaos) parts.push(SWITCHES.chaos.about, CHAOS_RULES[chaosRule].text);
+      parts.push('Whoever reaches Starbucks wins.');
+      rules = parts.join(' ');
+      if (!onSwitches().length) rules = 'Every switch is off, so these are Classic rules. Turn one on above.';
+      if (vary.chaos) rules += ' <em>Chaos turns need long moves. With 1-block moves the same player always wins.</em>';
+    }
     // Say who should win, but only once this board has been played, so the first game
     // stays a surprise. Chaos has no answer, since moves can loop.
     if (!isChaosMode() && !isPuzzle() && scoreFor(boardKey()).games > 0) {
@@ -1051,12 +1053,37 @@
       count += ` With best play, Player ${p1Loses ? 2 : 1} wins on this board.`;
     }
     $('rules').innerHTML = `<p>${rules}</p><p>${count}</p>`;
+    let hint = 'Tap a glowing corner, use the buttons, or press ↑ / →.';
+    if (isLong()) hint = 'Tap any glowing corner. Or pick how many blocks, then use the buttons.';
+    if (isRail()) hint += ' Corners below the track are off limits.';
+    if (isChaosMode()) hint += ' Dotted corners step back on a chaos turn.';
     $('boardHint').textContent = inSetup()
       ? 'Tap any corner of the map to put Starbucks there. Then make your first move.'
-      : MODES[mode].hint;
+      : hint;
   }
 
   // Extra settings some modes have. They live in a row under the board sizes.
+  // The three rule switches, only on the Variations tab.
+  function renderSwitches() {
+    const row = $('switches');
+    row.querySelectorAll('button').forEach(b => b.remove());
+    row.hidden = !isVariations();
+    if (!isVariations()) return;
+    Object.keys(SWITCHES).forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'size-btn';
+      b.id = `sw-${k}`;
+      b.textContent = SWITCHES[k].name;
+      b.setAttribute('aria-pressed', vary[k] ? 'true' : 'false');
+      // Long moves are locked on while Chaos turns are on.
+      const locked = k === 'long' && vary.chaos;
+      b.disabled = locked;
+      if (locked) b.title = 'Chaos turns need long moves.';
+      b.addEventListener('click', () => setSwitch(k, !vary[k]));
+      row.appendChild(b);
+    });
+  }
+
   function renderOptions() {
     const box = $('options');
     box.innerHTML = '';
@@ -1068,15 +1095,6 @@
         box.appendChild(stepper('Width', n, v => setBoard(v, m)));
         box.appendChild(stepper('Height', m, v => setBoard(n, v)));
       }
-    }
-    if (isRail()) {
-      const b = document.createElement('button');
-      b.className = 'size-btn';
-      b.id = 'railLong';
-      b.setAttribute('aria-pressed', railLong ? 'true' : 'false');
-      b.textContent = `Long moves: ${railLong ? 'on' : 'off'}`;
-      b.addEventListener('click', () => setRailLong(!railLong));
-      box.appendChild(b);
     }
     if (isChaosMode()) {
       const label = document.createElement('label');
@@ -1100,6 +1118,7 @@
 
   function render() {
     renderModes();
+    renderSwitches();
     renderOptions();
     renderRules();
     renderBoard();
@@ -1139,12 +1158,13 @@
   // Hooks for the self-check script below. They run the real game code on a
   // temporary board, then put the live game back the way it was.
   function withState(opts, fn) {
-    const saved = { mode, n, m, path, moves, railLong, chaosRule };
-    mode = opts.mode; n = opts.n; m = opts.m;
-    railLong = !!opts.railLong; chaosRule = opts.chaosRule || 'cap';
+    const saved = { mode, n, m, path, moves, vary, chaosRule };
+    mode = 'variations'; n = opts.n; m = opts.m;
+    vary = { long: !!opts.long, track: !!opts.track, chaos: !!opts.chaos };
+    chaosRule = opts.chaosRule || 'cap';
     path = [{ x: 0, y: 0 }]; moves = [];
     try { return fn(); }
-    finally { ({ mode, n, m, path, moves, railLong, chaosRule } = saved); }
+    finally { ({ mode, n, m, path, moves, vary, chaosRule } = saved); }
   }
   window.CoffeeShopCheck = {
     countPaths,
@@ -1153,13 +1173,15 @@
     losingAt: (opts, x, y) => withState(opts, () => makeSolver()(x, y)),
     // Play one game with random legal moves. Returns the winner and the move count.
     randomGame: opts => withState(opts, () => {
+      let onTrack = true;
       while (!isOver()) {
         const all = legalMoves();
         const mv = all[Math.floor(Math.random() * all.length)];
         path.push({ x: mv.x, y: mv.y });
         moves.push({ d: mv.d, k: mv.k });
+        if (!cornerOk(mv.x, mv.y)) onTrack = false;
       }
-      return { winner: isDraw() ? 0 : winner(), moves: moves.length };
+      return { winner: isDraw() ? 0 : winner(), moves: moves.length, onTrack };
     })
   };
 
@@ -1204,24 +1226,36 @@
 
   // Classic winner: n + m odd means Player 1 wins, even means Player 2.
   [[3, 2], [3, 3], [5, 4], [4, 4], [5, 5]].forEach(([n, m]) => {
-    const p1Loses = T.losingAt({ mode: 'classic', n, m }, 0, 0);
+    const p1Loses = T.losingAt({ n, m }, 0, 0);
     check(`classic winner on ${n}×${m}`, p1Loses ? 2 : 1, (n + m) % 2 === 1 ? 1 : 2);
   });
 
   // Long moves: equal blocks left East and North is a loss for the player to move.
   for (let x = 0; x <= 5; x++) for (let y = 0; y <= 4; y++) {
-    check(`long moves at (${x}, ${y})`, T.losingAt({ mode: 'long', n: 5, m: 4 }, x, y), (5 - x) === (4 - y));
+    check(`long moves at (${x}, ${y})`, T.losingAt({ long: true, n: 5, m: 4 }, x, y), (5 - x) === (4 - y));
   }
 
   // Railroad with 1-block moves: every game takes 2n moves, so Player 2 always wins.
-  [3, 4, 5].forEach(k => check(`railroad ${k}×${k} is a Player 2 win`, T.losingAt({ mode: 'rail', n: k, m: k }, 0, 0), true));
+  [3, 4, 5].forEach(k => check(`railroad ${k}×${k} is a Player 2 win`, T.losingAt({ track: true, n: k, m: k }, 0, 0), true));
+
+  // Track + chaos: random games never step below the track and always end.
+  [3, 4].forEach(k => {
+    let ok = true, longest = 0;
+    for (let g = 0; g < 40; g++) {
+      const r = T.randomGame({ long: true, track: true, chaos: true, n: k, m: k, check: true });
+      longest = Math.max(longest, r.moves);
+      if (!r.onTrack) ok = false;
+    }
+    check(`track + chaos stays on track on ${k}×${k}`, ok, true);
+    check(`track + chaos ends on ${k}×${k} (longest ${longest} moves)`, longest < 200, true);
+  });
 
   // Chaos mode must always end under each setting. Play random games and watch the move count.
   [[3, 2], [3, 3], [5, 4]].forEach(([n, m]) => {
     ['cap', 'tokens', 'limit'].forEach(rule => {
       let longest = 0, draws = 0;
       for (let g = 0; g < 40; g++) {
-        const r = T.randomGame({ mode: 'chaos', n, m, chaosRule: rule });
+        const r = T.randomGame({ long: true, chaos: true, n, m, chaosRule: rule });
         longest = Math.max(longest, r.moves);
         if (r.winner === 0) draws++;
       }
