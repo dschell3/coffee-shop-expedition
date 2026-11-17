@@ -44,15 +44,12 @@ The same game with three rule switches in a row under the tabs. Any mix is allow
 
 - **Long moves.** Move any number of blocks (at least 1), all North or all East. Math: two-pile Nim. With `a` blocks left East and `b` left North, the player to move is losing exactly when `a == b`. The winning move makes them equal, then copies the opponent.
 - **Train track.** Square boards only (the board is squared up when the switch goes on). A dashed track runs along the diagonal. The token may touch it but never cross below it: legal corners have `y >= x`. Corners below are dimmed and never offered. Math: legal paths on an n×n board are the Catalan numbers 1, 1, 2, 5, 14, 42. With 1-block moves every game takes 2n moves, so Player 2 always wins; add Long moves to make choices matter.
-- **Chaos turns.** On every 3rd turn (3, 6, 9, ...) the player may step back South or West instead. Never off the board, never onto Start, and never below the track when the track is on. A "Chaos turn!" banner shows and the backward corners are drawn dotted. Turning this on turns Long moves on and locks it, with a note saying why: with 1-block moves the same player always wins (every move changes x + y by 1, so the move count has the parity of n + m).
-  - **Open design question: termination.** Backward moves can make the game loop forever. Three options sit behind a dropdown so the group can compare them. Default is option 1 until the group decides. Once decided, keep that one and delete the dropdown.
-    1. Backward moves are capped at 1 block (forward moves can still be long).
-    2. Each player gets 2 chaos moves per game, shown as coffee-cup tokens.
-    3. A 30-turn limit. If it runs out, nobody wins.
+- **Chaos turns.** On every 3rd turn (3, 6, 9, ...) the player may step back 1 block South or West instead. Never off the board, never onto Start, and never below the track when the track is on. A "Chaos turn!" banner shows and the backward corners are drawn dotted. Turning this on turns Long moves on and locks it, with a note saying why: with 1-block moves the same player always wins (every move changes x + y by 1, so the move count has the parity of n + m).
+  - Back moves are capped at 1 block so the game always ends: every 3 turns give at least 2 blocks forward and at most 1 back. The group compared three ways to stop endless games (the 1-block cap, 2 chaos moves each, a 30-turn limit) and picked the cap. The other two are gone; don't bring them back.
 - **Hint button** (H key) shows when Long moves or Train track is on and Chaos turns is off. It uses the solver: the winning move if there is one, else "No winning move. Try to make them slip up."
 
 ### After a board's first game
-The rules box adds "With best play, Player X wins on this board" (from the solver). It only shows once that board has a finished game with those rules, so the first game stays a surprise. Never with Chaos turns, since moves can loop.
+On the Variations tab, the rules box adds "With best play, Player X wins on this board" (from the solver). It only shows once that board has a finished game with those rules, so the first game stays a surprise. Never in Classic, and never with Chaos turns, since moves can loop.
 
 ## Puzzles (built)
 
