@@ -7,7 +7,10 @@
 <style>
   /* Layout: board card on the left, game panel on the right; stacks to one column on phones */
   :root {
-    --bg: #e8d6c0;
+    --bg: #b98c66;
+    --on-bg: #2b1a10;
+    --on-bg-muted: #4a3021;
+    --bean: #6b4226;
     --card: #fffaf3;
     --ink: #3a281d;
     --muted: #7a6555;
@@ -28,7 +31,8 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #140f0b; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
+      --bg: #1c1209; --on-bg: #f1e6d8; --on-bg-muted: #c9b39c; --bean: #6b4226;
+      --card: #2d241c; --ink: #f1e6d8; --muted: #b8a593; --line: #43362c;
       --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
       --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
       --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
@@ -36,7 +40,8 @@
     }
   }
   :root[data-theme="dark"] {
-    --bg: #140f0b; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
+    --bg: #1c1209; --on-bg: #f1e6d8; --on-bg-muted: #c9b39c; --bean: #6b4226;
+    --card: #2d241c; --ink: #f1e6d8; --muted: #b8a593; --line: #43362c;
     --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
     --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
     --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
@@ -52,7 +57,13 @@
     color: var(--ink);
     line-height: 1.45;
   }
+  /* Coffee beans behind everything. Drawn as inline SVG so they take theme colors. Desktop only. */
+  .beans { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: none; }
+  @media (min-width: 841px) { .beans { display: block; } }
+  .bean { fill: var(--bean); opacity: .28; }
+  .bean-line { stroke: var(--bg); fill: none; opacity: .9; }
   .wrap {
+    position: relative; z-index: 1;
     max-width: 1060px;
     margin: 0 auto;
     padding-block: 20px 28px;
@@ -60,8 +71,8 @@
     padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
   header { text-align: center; padding-block: 8px 12px; }
-  h1 { margin: 0; font-size: 1.9rem; letter-spacing: -0.01em; text-wrap: balance; }
-  .sub { margin: 6px auto 0; color: var(--muted); max-width: 560px; }
+  h1 { margin: 0; font-size: 1.9rem; letter-spacing: -0.01em; text-wrap: balance; color: var(--on-bg); }
+  .sub { margin: 6px auto 0; color: var(--on-bg-muted); max-width: 560px; }
 
   main {
     display: grid;
@@ -78,7 +89,7 @@
     border-radius: 14px;
     padding: 16px;
     min-width: 0;
-    box-shadow: 0 1px 3px rgba(58, 40, 29, 0.08);
+    box-shadow: 0 2px 6px rgba(43, 26, 16, 0.18);
   }
   h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
 
@@ -203,10 +214,19 @@
   .fold > summary:focus-visible { outline: 3px solid var(--p1); outline-offset: -3px; }
   .fold > .body { padding: 0 16px 16px; }
   .fold ol:not(#log) { padding-left: 20px; margin: 0; font-size: 0.93rem; }
-  footer { text-align: center; color: var(--muted); font-size: 0.82rem; padding-top: 16px; }
+  footer { text-align: center; color: var(--on-bg-muted); font-size: 0.82rem; padding-top: 16px; }
 </style>
 </head>
 <body>
+
+<svg class="beans" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="beanPattern" width="240" height="240" patternUnits="userSpaceOnUse">
+      <g transform="translate(40 46) rotate(-32)"><ellipse class="bean" rx="17" ry="11"/><path class="bean-line" d="M-12 0 q6 -6 12 0 q6 6 12 0" stroke-width="2.5" stroke-linecap="round"/></g><g transform="translate(150 30) rotate(20)"><ellipse class="bean" rx="17" ry="11"/><path class="bean-line" d="M-12 0 q6 -6 12 0 q6 6 12 0" stroke-width="2.5" stroke-linecap="round"/></g><g transform="translate(110 120) rotate(-70)"><ellipse class="bean" rx="17" ry="11"/><path class="bean-line" d="M-12 0 q6 -6 12 0 q6 6 12 0" stroke-width="2.5" stroke-linecap="round"/></g><g transform="translate(205 165) rotate(35)"><ellipse class="bean" rx="17" ry="11"/><path class="bean-line" d="M-12 0 q6 -6 12 0 q6 6 12 0" stroke-width="2.5" stroke-linecap="round"/></g><g transform="translate(55 190) rotate(10)"><ellipse class="bean" rx="17" ry="11"/><path class="bean-line" d="M-12 0 q6 -6 12 0 q6 6 12 0" stroke-width="2.5" stroke-linecap="round"/></g>
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#beanPattern)"/>
+</svg>
 
 <div class="wrap">
   <header>
