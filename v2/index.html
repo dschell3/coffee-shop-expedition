@@ -7,7 +7,7 @@
 <style>
   /* Layout: board card on the left, game panel on the right; stacks to one column on phones */
   :root {
-    --bg: #f5ede1;
+    --bg: #e8d6c0;
     --card: #fffaf3;
     --ink: #3a281d;
     --muted: #7a6555;
@@ -28,7 +28,7 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #1d1712; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
+      --bg: #140f0b; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
       --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
       --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
       --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
@@ -36,7 +36,7 @@
     }
   }
   :root[data-theme="dark"] {
-    --bg: #1d1712; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
+    --bg: #140f0b; --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
     --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
     --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
     --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
@@ -78,6 +78,7 @@
     border-radius: 14px;
     padding: 16px;
     min-width: 0;
+    box-shadow: 0 1px 3px rgba(58, 40, 29, 0.08);
   }
   h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
 
@@ -210,7 +211,7 @@
 <div class="wrap">
   <header>
     <h1>The Coffee Shop Expedition</h1>
-    <p class="sub">A two-player walk across the city grid. Pick a mode, then race to the coffee shop.</p>
+    <p class="sub">A two-player walk across the city grid. Pick a tab, then race to the coffee shop.</p>
   </header>
 
   <main>
@@ -284,7 +285,7 @@
         <div class="body">
           <ol>
             <li>The token starts at the bottom-left corner. The coffee shop is at the top-right corner.</li>
-            <li>Before the first move, tap any corner of the map to choose where the coffee shop goes. Boards go up to 6 by 6.</li>
+            <li>In Classic, pick a board size. In Variations, tap any corner of the map before the first move to choose where the coffee shop goes, up to 6 by 6.</li>
             <li>Players take turns. Player 1 goes first.</li>
             <li>On your turn, move one block North (↑) or East (→). No diagonals and no going back.</li>
             <li>Whoever moves the token into the coffee shop wins.</li>
@@ -294,7 +295,7 @@
     </aside>
   </main>
 
-  <footer>Rough prototype · MATH 101 Combinatorial Games Project</footer>
+  <footer>MATH 101 Combinatorial Games Project · Sacramento State</footer>
 </div>
 
 <script>
