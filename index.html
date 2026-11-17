@@ -31,8 +31,8 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #1c1209; --on-bg: #f1e6d8; --on-bg-muted: #c9b39c; --bean: #6b4226;
-      --card: #2d241c; --ink: #f1e6d8; --muted: #b8a593; --line: #43362c;
+      --bg: #4a3322; --on-bg: #f1e6d8; --on-bg-muted: #e6d6c3; --bean: #9c7352;
+      --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
       --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
       --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
       --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
@@ -40,8 +40,8 @@
     }
   }
   :root[data-theme="dark"] {
-    --bg: #1c1209; --on-bg: #f1e6d8; --on-bg-muted: #c9b39c; --bean: #6b4226;
-    --card: #2d241c; --ink: #f1e6d8; --muted: #b8a593; --line: #43362c;
+    --bg: #4a3322; --on-bg: #f1e6d8; --on-bg-muted: #e6d6c3; --bean: #9c7352;
+    --card: #28201a; --ink: #f1e6d8; --muted: #b8a593; --line: #3d322a;
     --block: #332920; --street: #5c4b3c; --dot: #7a6655; --axis: #a8957f;
     --p1: #4fb58f; --p2: #e8874f; --cup: #d9a679; --btn-bg: #2f261f;
     --solid: #f1e6d8; --solid-ink: #1d1712; --token-ring: #28201a;
@@ -60,8 +60,8 @@
   /* Coffee beans behind everything. Drawn as inline SVG so they take theme colors. Desktop only. */
   .beans { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: none; }
   @media (min-width: 841px) { .beans { display: block; } }
-  .bean { fill: var(--bean); opacity: .28; }
-  .bean-line { stroke: var(--bg); fill: none; opacity: .9; }
+  .bean { fill: var(--bean); opacity: .4; }
+  .bean-line { stroke: var(--bg); fill: none; }
   .wrap {
     position: relative; z-index: 1;
     max-width: 1060px;
