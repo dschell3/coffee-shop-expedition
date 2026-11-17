@@ -1066,7 +1066,7 @@
     }
     // Say who should win, but only once this board has been played, so the first game
     // stays a surprise. Chaos has no answer, since moves can loop.
-    if (!isChaosMode() && !isPuzzle() && scoreFor(boardKey()).games > 0) {
+    if (!isChaosMode() && !isPuzzle() && !isClassic() && scoreFor(boardKey()).games > 0) {
       const p1Loses = makeSolver()(0, 0);
       count += ` With best play, Player ${p1Loses ? 2 : 1} wins on this board.`;
     }
