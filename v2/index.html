@@ -369,7 +369,7 @@
   let setup = true;
   // Classic keeps the three worksheet boards. Setup (placing Starbucks) is for Variations only.
   const CLASSIC_BOARDS = [[3, 2], [3, 3], [5, 4]];
-  let classicBoard = 1;
+  let classicBoard = 0;
   const isClassic = () => mode === 'classic';
   const inSetup = () => setup && moves.length === 0 && !isClassic();
   const boardKey = () => `${n}x${m}`;
