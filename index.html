@@ -362,14 +362,14 @@
   const cornerOk = (x, y) => !isRail() || y >= x;
 
   let mode = 'classic';
-  let n = 3, m = 3;      // board width and height: Starbucks is at corner (n, m)
+  // Classic keeps the three worksheet boards. Setup (placing Starbucks) is for Variations only.
+  const CLASSIC_BOARDS = [[3, 2], [3, 3], [5, 4]];
+  let classicBoard = 0;  // which Classic board is picked; the game opens on this one
+  let [n, m] = CLASSIC_BOARDS[classicBoard];  // board width and height: Starbucks is at corner (n, m)
   const MAXB = 6;        // biggest board, so it still fits on a phone
   // Setup is when Starbucks can still be placed: at the start, and after "Change board".
   // It ends with the first move. "Play again" keeps the board and skips setup.
   let setup = true;
-  // Classic keeps the three worksheet boards. Setup (placing Starbucks) is for Variations only.
-  const CLASSIC_BOARDS = [[3, 2], [3, 3], [5, 4]];
-  let classicBoard = 1;
   const isClassic = () => mode === 'classic';
   const inSetup = () => setup && moves.length === 0 && !isClassic();
   const boardKey = () => `${n}x${m}`;
